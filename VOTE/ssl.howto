@@ -1,0 +1,291 @@
+
+1. Project Structure
+
+your-project/
+├── docker-compose.yml
+├── traefik/
+│   ├── traefik.yml
+│   └── letsencrypt/acme.json
+├── vote_app/
+│   └── ... (your Django or Flask vote app)
+├── moderator_app/
+│   └── ... (your moderator app)
+
+
+
+2. docker-compose.yml
+
+version: "3.7"
+
+services:
+
+  # Voting App
+  webvote:
+    build: ./vote_app
+    image: vote-web-img
+    container_name: voteweb
+    restart: always
+    expose:
+      - "9000"
+    command: gunicorn vote_app.wsgi:application --bind 0.0.0.0:9000 --workers 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webvote.rule=Host(`vote.idugemea.eu`)"
+      - "traefik.http.routers.webvote.entrypoints=websecure"
+      - "traefik.http.routers.webvote.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webvote.loadbalancer.server.port=9000"
+
+  # Moderator App
+  moderator:
+    build: ./moderator_app
+    image: moderator-web-img
+    container_name: moderatorweb
+    restart: always
+    expose:
+      - "9100"
+    command: gunicorn moderator_app.wsgi:application --bind 0.0.0.0:9100 --workers 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.moderator.rule=Host(`moderator.idugemea.eu`)"
+      - "traefik.http.routers.moderator.entrypoints=websecure"
+      - "traefik.http.routers.moderator.tls.certresolver=letsencrypt"
+      - "traefik.http.services.moderator.loadbalancer.server.port=9100"
+
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Optional dashboard
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=you@example.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/letsencrypt:/letsencrypt
+
+
+3. ./traefik/traefik.yml
+
+api:
+  dashboard: true
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: you@example.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+
+4. Set Permissions for Let's Encrypt File
+
+Run this once:
+
+mkdir -p ./traefik/letsencrypt
+touch ./traefik/letsencrypt/acme.json
+chmod 600 ./traefik/letsencrypt/acme.json
+
+
+5. DNS Configuration
+
+Go to your domain registrar and set up these DNS A records (or CNAMEs):
+
+| Subdomain               | Type | Value (your NAS public IP) |
+| ----------------------- | ---- | -------------------------- |
+| `vote.idugemea.eu`      | A    | `your.public.ip.address`   |
+| `moderator.idugemea.eu` | A    | `your.public.ip.address`   |
+
+
+6. Launch Everything
+
+docker-compose up -d --build
+
+
+7. Visit Your Apps
+
+Voting app: https://vote.idugemea.eu
+
+Moderator app: https://moderator.idugemea.eu
+
+Traefik dashboard (optional): https://vote.idugemea.eu:8080/dashboard/ (not secure by default)
+
+
+
+Optional Extras
+🔁 Redirect HTTP to HTTPS
+
+Add this Traefik middleware:
+
+command:
+  - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+  - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+
+This ensures all http://vote.idugemea.eu → https://vote.idugemea.eu.
+
+
+
+Where to Put the Dockerfile
+
+You should place the Dockerfile here:
+
+your-project/
+├── docker-compose.yml
+├── vote_app/
+│   ├── Dockerfile   ✅ <--- THIS is where it goes
+│   └── ...
+
+So the file structure looks like this:
+
+your-project/
+├── docker-compose.yml
+├── vote_app/
+│   ├── Dockerfile      <-- here
+│   ├── requirements.txt
+│   ├── vote_app/       <-- Django or Flask project folder
+│   ├── manage.py
+│   └── ...
+
+
+Example Dockerfile
+
+# Use official Python base image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set work directory
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy project files
+COPY . .
+
+# Expose the port (used only internally by Traefik)
+EXPOSE 9000
+
+# Command is handled in docker-compose
+
+
+You already define the command for gunicorn in your docker-compose.yml, so no need to add CMD here.
+
+
+
+Reviewed and Corrected Dockerfile
+
+FROM ubuntu:22.04
+
+LABEL maintainer="IDUG"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-setuptools \
+    build-essential \
+    libsasl2-dev \
+    libldap2-dev \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /usr/src/vote_app
+
+# Copy app source
+COPY . .
+
+# Copy environment variables (optional, can be handled via docker-compose)
+COPY .env ./vote_app/
+
+# Install Python dependencies
+RUN pip3 install --upgrade pip && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+# Expose internal port (can be anything — Traefik will route to it)
+EXPOSE 9000
+
+# Start the app with Gunicorn
+CMD ["gunicorn", "vote_app.wsgi:application", "--bind", "0.0.0.0:9000", "--workers", "3"]
+
+
+
+
+Key Fixes & Explanations
+
+| Issue                      | Fix                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Maintainer instruction** | `MAINTAINER` is deprecated — use `LABEL maintainer="..."`                                        |
+| **Duplicate COPY**         | You copied `.` twice — not harmful, but redundant                                                |
+| **WORKDIR**                | Set to the top-level app folder — adjusted to `/usr/src/vote_app`                                |
+| **Python not installed**   | You didn't install `python3` itself! Fixed.                                                      |
+| **Exposed port mismatch**  | You exposed `8080`, but `docker-compose.yml` uses port `9000` — fixed to match                   |
+| **CMD syntax**             | Changed from shell-style `CMD exec ...` to exec form `CMD ["..."]` for better container handling |
+| **Apt cleanup**            | Added cleanup to reduce image size                                                               |
+
+
+Bonus Tips
+
+Add a .dockerignore file to reduce build context:
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+*.sqlite3
+.git/
+
+
+
+
+.env
+
+your-project/
+├── docker-compose.yml
+├── .env         <-- used by Docker Compose itself (optional)
+├── vote_app/
+│   ├── .env     <-- app-specific env file
+│   └── ...
+
+
+services:
+  webvote:
+    build: ./vote_app
+    env_file:
+      - ./vote_app/.env
+
+
+

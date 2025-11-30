@@ -26,7 +26,7 @@ class ModeratorsTable(tables.Table):
 
     class Meta:
         model = Moderators
-        template_name = "django_tables2/bootstrap4.html"
+        template_name = "tables/bootstrap5_prevnext.html"
         fields = (
             "session_date",
             "session_time",

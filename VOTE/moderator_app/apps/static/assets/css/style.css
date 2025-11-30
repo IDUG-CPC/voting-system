@@ -84,6 +84,47 @@ body {
   padding-left: 2.5rem !important;
 }
 
+/* --- Perfect alignment and visual consistency for Moderator combo --- */
+table thead th select#moderatorFilter {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background-color: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 2px 22px 2px 8px;
+  height: 28px;               /* equal to Bootstrap header line height */
+  line-height: 1.4;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  position: relative;
+  top: 1px;                   /* aligns vertically with other th text */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%236c757d' height='10' viewBox='0 0 20 20' width='10' xmlns='http://www.w3.org/2000/svg'><path d='M5.5 7l4.5 4.5L14.5 7z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center; /* move arrow a bit more right */
+  background-size: 12px 12px;             /* make it slightly larger */
+
+}
+
+table thead th select#moderatorFilter:hover,
+table thead th select#moderatorFilter:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.08rem rgba(13,110,253,.25);
+  outline: none;
+}
+
+table thead th {
+  vertical-align: middle !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+
+
+
 .info-box-custom {
     display: flex;
     flex-wrap: wrap;
@@ -10669,4 +10710,113 @@ div.code-toolbar > .toolbar span:hover {
 		-webkit-box-shadow: 0 0 0 0 rgba(4, 169, 245, 0);
 		box-shadow: 0 0 0 0 rgba(4, 169, 245, 0)
 	}
+}
+
+
+/* ==========================================================
+   FINAL FIX: mobile combobox same width and alignment as search
+   ========================================================== */
+@media (max-width: 767.98px) {
+  #mobileModeratorFilter {
+    all: revert; /* restore Bootstrap box sizing and width behavior */
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    font-family: "Open Sans", sans-serif;
+    font-size: 0.95rem;
+    color: #212529;
+    background-color: #f8f9fa; /* Bootstrap gray */
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    padding: 0.45rem 1.75rem 0.45rem 0.75rem;
+    margin-top: 12px;
+    line-height: 1.5;
+    appearance: auto;
+    -webkit-appearance: menulist;
+    -moz-appearance: menulist;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+
+  #mobileModeratorFilter:hover {
+    border-color: #99ccff;
+  }
+
+  #mobileModeratorFilter:focus {
+    border-color: #66b0ff !important;
+    box-shadow: 0 0 0 0.25rem rgba(102, 176, 255, 0.25) !important;
+    outline: none !important;
+    background-color: #ffffff;
+  }
+}
+
+
+/* ==========================================================
+   Chevron on the LEFT for all comboboxes (desktop + mobile)
+   ========================================================== */
+.combo-wrapper {
+  position: relative;
+}
+
+.combo-wrapper .combo-icon-left {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  font-size: 0.9rem;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* shift text right so it doesn’t overlap the icon */
+.combo-wrapper select {
+  padding-left: 2rem !important;
+}
+
+/* hover/focus styling */
+.combo-wrapper select:hover {
+  border-color: #99ccff;
+}
+
+.combo-wrapper select:focus {
+  border-color: #66b0ff !important;
+  box-shadow: 0 0 0 0.25rem rgba(102, 176, 255, 0.25) !important;
+  outline: none !important;
+  background-color: #ffffff;
+}
+
+/* ===============================================
+   Improve default select arrow (desktop & mobile)
+   =============================================== */
+
+/* Slightly enlarge and reposition Bootstrap’s select arrow */
+select.form-select,
+.form-select-sm {
+  background-position: right 0.75rem center !important; /* closer to text */
+  background-size: 0.9rem auto !important;              /* slightly larger */
+}
+
+/* Desktop only: make the arrow a bit bigger and bolder */
+@media (min-width: 768px) {
+  select.form-select,
+  .form-select-sm {
+    background-size: 1.2rem auto !important;
+    background-position: right 1rem center !important;
+  }
+}
+
+/* Optional: blue focus ring for consistency */
+select.form-select:focus {
+  border-color: #66b0ff !important;
+  box-shadow: 0 0 0 0.25rem rgba(102, 176, 255, 0.25) !important;
+  outline: none !important;
+}
+
+
+/* Force arrow spacing adjustment for Moderator select */
+table thead th select#moderatorFilter {
+  background-position: right 18px center !important; /* move arrow further right */
+  background-size: 13px 13px !important;             /* slightly larger arrow */
+  padding-right: 28px !important;                    /* keep text spacing balanced */
 }

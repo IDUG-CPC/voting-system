@@ -33,6 +33,8 @@ $.ajaxSetup({
 
 
 function refresh_moderator_table(resetPage = false) {
+    //console.log('refresh')
+
     let url = new URL(window.location.href);
 
     if (resetPage) {
@@ -40,52 +42,48 @@ function refresh_moderator_table(resetPage = false) {
         window.history.replaceState({}, '', url);
     }
 
-    const moderatorFilter = $('#moderatorFilter').val() || 'all';
-    const currentSearch = $('#search').val() || '';
-
     $.ajax({
         beforeSend: function(request) {
             request.setRequestHeader("X-CSRFToken", getCookie('csrftoken'));
         },
-        url: "refresh_moderators",
-        type: "POST",
-        headers: {
-            'X-Mobile-View': window.innerWidth < 768 ? 'true' : 'false'
-        },
-        data: {
-            url: url.toString(),
-            search: currentSearch,
-            moderator_filter: moderatorFilter
+        url : "refresh_moderators",
+        type : "POST",
+        data : {
+                url : url.toString(),
+                search : currentSearch
         },
 
-        success: function(data) {
+        success : function(data) {
+            //console.log("success");
             $("#results_moderators").html(data);
         },
 
-        error: function(xhr, errmsg, err) {
-            let error;
-            const data = xhr.responseJSON;
+        // handle a non-successful response
+        error : function(xhr,errmsg,err) {
 
+            data = xhr.responseJSON
             if (data !== undefined) {
+                //console.log(data)
                 if ('message' in data) {
-                    error = data['message'];
+                    error = data['message']
                 } else {
-                    error = errmsg;
+                    error = errmsg
                 }
             } else {
-                if (err === "Forbidden") {
-                    error = 'You do not have the rights to execute this operation. Please contact the administrator.';
-                } else {
-                    error = 'An unexpected error occurred. Please retry. If the issue persists, contact your administrator.';
+                if(err == "Forbidden") {
+                    error = 'You do not have the rights to execute this operation. Please contact the administrator.'
                 }
+                else {
+                    error = 'An unexpected error occured. Please retry. If the issue still occurs, contact your administrator.'
+                }
+
             }
 
             alertify.error(error);
             return false;
         }
     });
-}
-
+};
 
 
 function value_edit(session_id) {
@@ -96,9 +94,6 @@ function value_edit(session_id) {
         },
         url : "get_modal_edit_value",
         type : "POST",
-                headers: {
-            'X-Mobile-View': window.innerWidth < 768 ? 'true' : 'false'
-        },
         data : {
             session_id : session_id
 
@@ -142,8 +137,8 @@ function save_edit_value(session_id) {
         type : "POST",
         data : {
             session_id : session_id,
-            moderator_name: $('#moderator_name').val(),
-            moderator_email: $('#moderator_email').val()
+            moderator_name : $('#modal-content #moderator_name').val(),
+            moderator_email : $('#modal-content #moderator_email').val()
 
         },
 

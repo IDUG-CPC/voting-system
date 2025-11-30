@@ -2,44 +2,7 @@
 {% load static %}
 
 {% block title %}Moderator Sign-up{% endblock %}
-{% block stylesheets %}
-<style>
-  /* Make .content span full width of the card */
-  .card.user-list .content {
-    display: block;
-    width: 100%;
-  }
-
-  /* Ensure table containers also span full width */
-  .table-wrapper,
-  .table-responsive {
-    width: 100% !important;
-    display: block !important;
-  }
-
-  /* Center pagination horizontally across card width */
-  .card.user-list .pagination {
-    display: flex !important;
-    justify-content: center !important;
-    width: 100%;
-    margin-top: 1rem;
-  }
-
-  /* Table text alignment */
-  table td,
-  table th {
-    text-align: left;
-    white-space: normal !important;
-    word-break: break-word;
-  }
-
-  #results_moderators {
-    min-height: 450px;
-  }
-</style>
-
-
-{% endblock %}
+{% block stylesheets %}{% endblock %}
 
 {% block content %}
 
@@ -91,19 +54,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Mobile-only Moderator filter below search bar -->
-                                <div class="row d-md-none mb-3">
-                                  <div class="col-12">
-                                    <select id="mobileModeratorFilter" >
-                                      <option selected>Moderator</option>
-                                      <option>John</option>
-                                      <option>Mary</option>
-                                      <option>(No moderator)</option>
-                                    </select>
-                                  </div>
-                                </div>
-
-
                                 <div class="row">
                                     <div class="content">
                                         <div id="results_moderators" style="min-height: 400px; margin-top:10px;">
@@ -143,17 +93,6 @@
         } else {
             refresh_moderator_table(false); // Keep current page
         }
-
-        // Apply filter to cards immediately (no reload)
-        $('#card-list .card').each(function () {
-            const content = $(this).data('search');
-            if (content.includes(currentSearch)) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
-
     }
 
     $(document).ready(function () {
@@ -167,26 +106,5 @@
             refresh_moderator_table();
         });
     });
-
-    // Keyboard navigation for pagination (← and →)
-    $(document).on('keydown', function (event) {
-        const prevLink = $('#results_moderators .pagination .page-item:not(.disabled) a[aria-label="Previous"]');
-        const nextLink = $('#results_moderators .pagination .page-item:not(.disabled) a[aria-label="Next"]');
-
-        if (event.key === "ArrowLeft" && prevLink.length) {
-            event.preventDefault();
-            const pageUrl = prevLink.attr('href');
-            history.pushState(null, '', pageUrl);
-            refresh_moderator_table();
-        }
-
-        if (event.key === "ArrowRight" && nextLink.length) {
-            event.preventDefault();
-            const pageUrl = nextLink.attr('href');
-            history.pushState(null, '', pageUrl);
-            refresh_moderator_table();
-        }
-    });
-
 </script>
 {% endblock %}
