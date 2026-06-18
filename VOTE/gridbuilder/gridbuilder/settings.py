@@ -22,7 +22,8 @@ env = environ.Env()
 env_file = BASE_DIR / "gridbuilder" / ".env_dev"
 
 # reading .env file
-environ.Env.read_env(env_file)
+if env_file.exists():
+    environ.Env.read_env(env_file)
 
 
 
@@ -167,6 +168,7 @@ CSRF_COOKIE_SECURE = True
 
 USE_X_FORWARDED_HOST = True
 
-CSRF_TRUSTED_ORIGINS = ['https://gridbuilder.idugemea.eu']
+#CSRF_TRUSTED_ORIGINS = ['https://gridbuilder.idugemea.eu']
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS").split(',')
 
 LOGIN_URL = '/planner'
