@@ -24,7 +24,7 @@ COPY . .
 # Install Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-RUN python3 manage.py collectstatic --noinput
+# RUN python3 manage.py collectstatic --noinput
 
 # Expose internal port (can be anything — Traefik will route to it)
 EXPOSE 9200
