@@ -1,0 +1,254 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %}Grid Builder{% endblock %}
+
+{% block stylesheets %}
+<link rel="stylesheet" href="{% static 'assets/css/planner.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<div id="planner-wrapper" class="{% if not is_authenticated %}splash-blurred{% endif %}">
+<div class="planner-hero">
+  <div class="planner-hero-bg"></div>
+</div>
+
+<div class="planner-window container-fluid">
+  <div class="row">
+    <!-- Left: Calendar -->
+    <div class="col-lg-9">
+
+
+
+          <div class="col-md-2 d-flex align-items-end gap-2">
+              <img src="{% static 'assets/images/idug-logo.png' %}" class="idug-logo" />
+              {% if is_authenticated and event_code %}
+              <span class="event-label">{{ event_code }}</span>
+              {% endif %}
+          </div>
+
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <!-- Session Type Counters -->
+        <div class="session-type-legend mb-2"></div> <!-- Session Type Counters -->
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <!-- Day tabs -->
+        <div class="col-md-10">
+          <ul class="nav nav-tabs mb-3" id="dayTabs"></ul>
+        </div>
+
+        <!-- Open/Import + Export Icon + Log out -->
+        <div class="col-md-2 text-end d-flex align-items-center justify-content-end header-actions">
+           <img src="{% static 'assets/images/open.png' %}" class="open-icon"  />
+           <img src="{% static 'assets/images/export.png' %}" class="export-icon" />
+           {% if is_authenticated %}
+           <a href="{% url 'planner:logout' %}" class="exit-link" title="Log out" aria-label="Log out">
+             <img src="{% static 'assets/images/exit.png' %}" class="exit-icon" alt="Log out" />
+           </a>
+           {% endif %}
+        </div>
+      </div>
+      <!-- Track headers -->
+      <div id="calendar-headers" class="d-grid mb-2"
+           style="grid-template-columns: 180px repeat(6, 1fr); text-align: center; font-size: 0.9rem;">
+        <div></div> <!-- empty for row header column -->
+      </div>
+
+      <!-- Main grid -->
+      <div id="calendar" class="calendar-grid p-2 rounded shadow-sm"></div>
+    </div>
+
+    <!-- Right: Sessions + Logs -->
+    <div class="col-lg-3 right-panel">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between gap-2">
+          <span>Sessions</span>
+          <button type="button" class="btn btn-link btn-sm p-0 border-0 text-secondary filter-toggle-btn" id="sessionFilterBtn" title="Filter sessions" aria-label="Filter sessions" style="display: none;">
+            <i class="bi bi-funnel"></i>
+          </button>
+        </div>
+
+        <!-- Filter panel (visible only when All tab active) -->
+        <div id="sessionFilterPanel" class="session-filter-panel collapse border-bottom bg-light px-2 pb-2">
+          <div class="d-flex align-items-center gap-2 flex-wrap mt-2 mb-2">
+            <span class="small fw-semibold">Mode:</span>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="filterMode" id="filterModeAll" value="AND" checked>
+              <label class="form-check-label small" for="filterModeAll">AND</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="filterMode" id="filterModeAny" value="OR">
+              <label class="form-check-label small" for="filterModeAny">OR</label>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="sessionFilterClear">Clear</button>
+            <span class="small text-muted ms-auto" id="sessionFilterResults">Results: 0 / 0</span>
+          </div>
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Type</label>
+              <select class="form-select form-select-sm" id="filterType" multiple size="3"></select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Subject</label>
+              <select class="form-select form-select-sm" id="filterSubject" multiple size="3"></select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Topic</label>
+              <select class="form-select form-select-sm" id="filterTopic" multiple size="3"></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session tabs -->
+        <ul class="nav nav-tabs mb-2" id="sessionTabs"></ul>
+
+        <!-- Session list (normal sessions) -->
+        <div class="card-body p-0" id="sessionListContainer">
+          <div id="itemList" class="scrollable-list">
+            {% for s in sessions %}
+              <div class="item"
+                   draggable="true"
+                   data-id="{{ s.id }}"
+                   data-type="{{ s.session_type.name }}"
+                   data-type-id="{{ s.session_type_id }}"
+                   data-subject-id="{{ s.subject_id }}"
+                   data-topic-ids="{{ s.topic_ids_str|default:'' }}">
+                ({{ s.rating }}) - {{ s.session_code }} - {{ s.title }} ({{ s.speaker_full_name }}){% if s.subject %} ({{ s.subject.subject_code }}){% endif %}
+              </div>
+            {% endfor %}
+          </div>
+
+          <!-- Special types (e.g. PSP) – not from Session table; drag same type multiple times -->
+          <div id="specialList" class="scrollable-list special-list" style="display: none;">
+            <div class="special-section-title">Special</div>
+            {% for st in special_session_types %}
+            <div class="item item-special"
+                 draggable="true"
+                 data-special-type-id="{{ st.id }}"
+                 data-name="{{ st.name }}"
+                 data-color="{{ st.color|default:'#e7f1ff' }}">
+              {{ st.name }}
+            </div>
+            {% empty %}
+            <div class="text-muted small p-2">No special types. Add rows to planner_specialsessiontype (e.g. PSP).</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Log</span>
+          <button id="undoBtn" class="btn btn-sm btn-outline-secondary">Undo Last</button>
+        </div>
+        <div class="card-body p-0">
+          <div id="log" class="scrollable-log"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast (top right) -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 1055">
+  <div id="undoToast" class="toast align-items-center text-bg-info border-0 shadow-sm" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="undoToastBody">Nothing to undo.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Comment Modal -->
+<div class="modal fade" id="logCommentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-body">
+
+        <!-- Context info about selected log row -->
+        <div id="logCommentContext"
+             class="small text-muted mb-2 p-2 rounded"
+             style="background:#f8f9fa;">
+        </div>
+
+        <textarea id="logCommentText"
+                  class="form-control"
+                  rows="4"
+                  placeholder="Add a comment..."></textarea>
+
+        <input type="hidden" id="logCommentId">
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="logCommentSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for Editing Session Description (special sessions) -->
+<div class="modal" id="sessionEditModal" tabindex="-1" aria-labelledby="sessionEditModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sessionEditModalLabel"></h5>
+            </div>
+            <div class="modal-body">
+                <textarea id="modalSessionDescription" class="form-control" placeholder="Enter session details"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sessionEditSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+</div>
+<!-- end #planner-wrapper -->
+
+{% if not is_authenticated %}
+<div id="splash-overlay" class="splash-overlay">
+  <div class="splash-card">
+    <div class="splash-title">
+      <img src="{% static 'assets/images/idug.png' %}" class="splash-logo" alt="IDUG" />
+      <h1 class="splash-heading">Grid Builder</h1>
+    </div>
+    <form id="splash-login-form" class="splash-form" method="post" action="{% url 'planner:login' %}" novalidate>
+      {% csrf_token %}
+      <div id="splash-login-error" class="splash-error text-danger small mb-2" style="display: none;"></div>
+      <div class="mb-2">
+        <label for="splash-username" class="form-label">Username</label>
+        <input type="text" id="splash-username" name="username" class="form-control" autocomplete="username" required>
+      </div>
+      <div class="mb-3">
+        <label for="splash-password" class="form-label">Password</label>
+        <input type="password" id="splash-password" name="password" class="form-control" autocomplete="current-password" required>
+      </div>
+      <div class="d-flex gap-2 flex-wrap justify-content-center">
+        <button type="submit" class="btn btn-primary" id="splash-login-btn">Log in</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block javascripts %}
+{{ session_types|json_script:"session-types-data" }}
+{{ topics|json_script:"filter-topics-data" }}
+{{ subjects|json_script:"filter-subjects-data" }}
+<script>
+  window.READ_ONLY = false;
+</script>
+<script src="{% static 'assets/js/planner.js' %}"></script>
+{% endblock %}

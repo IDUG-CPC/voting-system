@@ -4,4 +4,31 @@
 /VOTE/vote_app/models.out
 /VOTE/moderator_app/apps/selection/migrations/
 /VOTE/moderator_app/models.out
+/VOTE/gridbuilder/planner/migrations/
+/VOTE/gridbuilder/planner/sql/
+/VOTE/gridbuilder/models.out
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Environment files
+.env
+.env*
+*.env
+
+# Django/static
+staticfiles/
+media/
+
+# Local database / dumps
+*.dump
+*.sql
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/

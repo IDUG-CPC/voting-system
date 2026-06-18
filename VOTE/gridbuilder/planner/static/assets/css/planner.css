@@ -1,0 +1,482 @@
+    body { background-color: #f8f9fa; }
+
+    /* === Banner background === */
+    .planner-hero {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      min-height: 220px;
+    }
+
+    .planner-hero-bg {
+      position: absolute;
+      inset: 0;
+      background-image: url("/static/assets/images/banner.jpg");
+      background-size: cover;
+      background-position: center;
+    }
+
+    /* Optional soft overlay */
+    .planner-hero-bg::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 60, 120, 0.35);
+    }
+
+
+    /* === Floating window === */
+    .planner-window {
+      position: relative;
+      margin-top: -170px;        /* overlap banner */
+      margin-bottom: 40px;
+      padding: 24px 28px 32px;
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(6px);
+      border-radius: 14px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+      z-index: 10;
+      min-height: 100%; /* Ensure the background block grows with content */
+      height: auto; /* Let it adjust based on content */
+    }
+
+    .idug-logo {
+        max-height: 40px;  /* Control the size of the logo */
+        width: auto;  /* Preserve aspect ratio */
+    }
+
+    .event-label {
+        color: #084298 !important;  /* Darker blue, closer to IDUG logo */
+        font-size: 0.875rem;
+        font-weight: 600;
+        align-self: flex-end;
+    }
+
+    /* Make sure the icon aligns properly */
+    .icon-container {
+      margin-left: auto; /* Push the export icon to the right */
+    }
+
+    .header-actions {
+      gap: 0.75rem;
+    }
+
+    .open-icon {
+      width: 44px;
+      height: auto;
+    }
+
+    .export-icon {
+      width: 64px;
+      height: auto;
+    }
+
+    .exit-link {
+      display: inline-flex;
+      line-height: 0;
+    }
+
+    .exit-icon {
+      width: 36px;
+      height: auto;
+    }
+
+    .session-type-legend {
+      flex-grow: 1; /* Ensure the counters take up available space */
+    }
+
+
+    .session-type-legend {
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+    }
+
+    .session-type-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .session-type-color {
+      width: 14px;
+      height: 14px;
+      border: 1px solid #000;
+      flex-shrink: 0;
+      background-color: transparent;
+      background-image: none;
+    }
+
+    .session-type-count {
+      font-weight: 600;
+      margin-left: 2px;
+    }
+
+    /* Mobile tuning */
+    @media (max-width: 768px) {
+      .planner-hero {
+        height: 160px;
+      }
+
+      .planner-window {
+        margin-top: -120px;
+        padding: 16px;
+        border-radius: 10px;
+      }
+    }
+
+
+
+
+    /* Calendar grid with 1 header column + 6 tracks */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: 180px repeat(6, 1fr);
+      gap: 4px;
+    }
+
+    /* Row header: label + time in one line */
+    .row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      border: none;
+      background: transparent;
+    }
+    .row-header .label { color: #212529; }
+    .row-header .time { color: #6c757d; font-size: 0.8rem; }
+
+    /* Break row: compact grey block filling all tracks */
+    .separator-row {
+      background-color: #dee2e6;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      min-height: 32px;   /* smaller height */
+      margin: 2px 0;      /* compact vertical spacing */
+    }
+
+    .cell-lock {
+      background-color: #f1f1f1 !important;
+      border: 1px solid #ddd;
+      cursor: not-allowed;
+    }
+
+    .cell-lock::after {
+      content: "—";
+      color: #aaa;
+      font-size: 1.2em;
+      display: block;
+      text-align: center;
+      line-height: 2.5em;
+    }
+
+
+    .cell {
+      border: 1px solid #dee2e6;
+      background: #fff;
+      text-align: center;
+      padding: 6px;
+      min-height: 60px;
+      border-radius: 4px;
+    }
+    .cell.drag-over { background: #cfe2ff; }
+
+    .item {
+      background: #e7f1ff;
+      border: 1px solid #b6d4fe;
+      padding: 6px;
+      margin-bottom: 4px;
+      cursor: grab;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+
+    /* Special sessions tab */
+    .special-list .special-section {
+      margin-bottom: 1rem;
+    }
+    .special-section-title {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #495057;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .special-section-items .item {
+      margin-bottom: 4px;
+    }
+    .item-special {
+      border-color: #9eb9e0;
+    }
+
+    /* Grid cell: session block with optional pencil */
+    .cell-session-wrap {
+      position: relative;
+      min-height: 100%;
+      border-radius: 4px;
+      padding: 6px;
+      padding-right: 28px;
+    }
+    .cell-session-wrap .item {
+      margin: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    .cell-special-description {
+      font-size: 0.8rem;
+      line-height: 1.3;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .session-edit-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      font-size: 0.9rem;
+      line-height: 1;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #495057;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, opacity 0.15s;
+    }
+    .session-edit-btn:hover {
+      background: transparent;
+      color: #212529;
+      opacity: 1;
+    }
+
+
+    .scrollable-list {
+      max-height: 50vh;        /* Set max height to 60% of the viewport height */
+      height: 50vh;            /* Ensure the height remains fixed at 60% of the viewport */
+      overflow-y: auto;        /* Allow vertical scrolling when content exceeds */
+      padding: 0.75rem;        /* Adjust padding for better spacing */
+      box-sizing: border-box;  /* Make sure padding doesn't add to the height */
+    }
+
+    .scrollable-log {
+      max-height: 20vh;        /* Set max height to 30% of the viewport height */
+      height: 20vh;            /* Ensure the height remains fixed at 30% of the viewport */
+      overflow-y: auto;        /* Allow vertical scrolling when content exceeds */
+      padding: 0.4rem 0.6rem 0.4rem 0.3rem;  /* smaller left padding */
+      font-size: 0.85rem;      /* Optional: adjust font size for readability */
+      box-sizing: border-box;  /* Make sure padding doesn't add to the height */
+    }
+
+    .scrollable-list::-webkit-scrollbar,
+    .scrollable-log::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .scrollable-list::-webkit-scrollbar-thumb,
+    .scrollable-log::-webkit-scrollbar-thumb {
+      background-color: #bbb;
+      border-radius: 4px;
+    }
+
+
+    .log-line {
+      display: grid;
+      grid-template-columns: 95px 2fr 1fr 28px; /* time | message | comment | icon */
+      gap: 20px;
+      align-items: start;
+      font-family: monospace;
+    }
+
+    .log-time {
+      text-align: right;
+      opacity: 0.7;
+      white-space: nowrap;
+    }
+
+    .log-content { min-width: 0; } /* allows truncation */
+    .log-message {
+      white-space: nowrap;     /* keep single line */
+      overflow: visible;       /* no truncation */
+      text-overflow: unset;
+    }
+
+    .log-comment-preview {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis; /* only comment truncates */
+      opacity: 0.75;
+    }
+
+    .log-comment-preview {
+      opacity: 0.75;
+      font-size: 0.8rem;
+    }
+
+    /* icon behavior */
+    .log-comment-btn {
+      opacity: 0.9;
+      padding: 0;
+      line-height: 1;
+      transition: opacity 120ms ease-in-out;
+    }
+
+    .log-comment-btn.comment-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* show icon on hover if no comment */
+    .log-line:hover .log-comment-btn.comment-hidden {
+      opacity: 0.9;
+      pointer-events: auto;
+    }
+
+    /* mobile/touch: show icon when row selected */
+    .log-line.is-selected .log-comment-btn.comment-hidden {
+      opacity: 0.9;
+      pointer-events: auto;
+    }
+
+    /* highlight full row on hover */
+    .log-line {
+      padding: 4px 6px;
+      border-radius: 6px;
+      transition: background 120ms ease-in-out;
+    }
+
+    .log-line:hover {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    /* remove square around 💬 */
+    .log-comment-btn {
+      background: transparent !important;
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+      cursor: pointer;
+    }
+
+    .log-comment-btn:focus,
+    .log-comment-btn:focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+
+    /* Tabs + Undo */
+    .nav-tabs .nav-link { cursor: pointer; }
+    #undoBtn { font-size: 0.85rem; padding: 2px 8px; }
+
+    /* Right panel layout */
+    @media (min-width: 992px) {
+      html, body, .container-fluid, .row { height: 100%; }
+      .right-panel {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 3rem);
+        position: sticky;
+        top: 1rem;
+      }
+      .right-panel .card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 0.5rem;
+      }
+      .right-panel .card-body {
+        overflow-y: auto;
+        flex: 1;
+      }
+      .right-panel .card:first-child { flex: 1.2; }
+      .right-panel .card:last-child { flex: 0.8; }
+    }
+
+    /* Ensuring correct height for the page and container */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Remove fixed height for body and container */
+    .container-fluid, .row {
+      height: auto;  /* Let these containers grow with the content */
+    }
+
+    /* === Splash / Login overlay === */
+    #planner-wrapper.splash-blurred {
+      filter: blur(8px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .splash-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 40, 80, 0.45);
+      backdrop-filter: blur(4px);
+    }
+
+    .splash-card {
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+      padding: 2rem 2.5rem;
+      min-width: 320px;
+      max-width: 90vw;
+    }
+
+    .splash-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 1.5rem;
+    }
+
+    .splash-logo {
+      height: 36px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .splash-heading {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin: 0;
+      color: #084298;  /* IDUG blue */
+    }
+
+    .splash-form .form-label {
+      font-weight: 500;
+    }
+
+    .splash-error {
+      min-height: 1.2em;
+    }
+
+    .read-only-item {
+      cursor: default !important;
+    }
+
+    .session-filter-panel .form-select[size] {
+      min-height: 4.5rem;
+    }
