@@ -24,6 +24,14 @@ def _log_session_to_cell(session, layout):
     # e.g. "SESS-197 → D3"
     return f"{session.session_code} → {layout.label}"
 
+
+def _is_first_time_presenter(value):
+    """Sessionboard stores Yes/No in speaker_1_first_time (CharField)."""
+    if value is None:
+        return False
+    s = str(value).strip().lower()
+    return s in ("yes", "true", "1", "y")
+
 def _now_iso():
     return timezone.now().isoformat()
 
@@ -40,6 +48,24 @@ def _used_session_ids(event_code):
         .exclude(session__isnull=True)
         .values_list("session_id", flat=True)
     )
+
+
+def _speaker_conflict_at_time(event_code, session, layout):
+    """True if session's speaker already has another session at layout's day+time slot."""
+    if CalendarSlot.objects.filter(
+        event_code=event_code,
+        layout=layout,
+        session__speaker_1_first_name=session.speaker_1_first_name,
+        session__speaker_1_last_name=session.speaker_1_last_name,
+    ).exists():
+        return False
+    return CalendarSlot.objects.filter(
+        event_code=event_code,
+        layout__day=layout.day,
+        layout__time_slot=layout.time_slot,
+        session__speaker_1_first_name=session.speaker_1_first_name,
+        session__speaker_1_last_name=session.speaker_1_last_name,
+    ).exclude(session=session).exists()
 
 @require_http_methods(["GET"])
 def api_session_type_counts(request):
@@ -132,14 +158,16 @@ def _slots_payload(day: int, event_code: str):
                 "id": sess.id,
                 "code": sess.session_code,
                 "title": sess.title,
-                "speaker_first": sess.speaker_first_name,
-                "speaker_last": sess.speaker_last_name,
+                "speaker_first": sess.speaker_1_first_name,
+                "speaker_last": sess.speaker_1_last_name,
                 "speaker_full": sess.speaker_full_name(),
-                "speaker_company": sess.speaker_company,
-                "session_type": sess.session_type.name,
+                "speaker_company": sess.speaker_1_company,
+                "session_type": sess.session_type.name if sess.session_type else "",
                 "session_type_id": sess.session_type_id,
                 "subject": sess.subject.subject_code,
-                "color": sess.session_type.color,
+                "color": sess.session_type.color if sess.session_type else "#e7f1ff",
+                "rating": float(sess.rating) if sess.rating is not None else 0.0,
+                "is_first_time_presenter": _is_first_time_presenter(sess.speaker_1_first_time),
                 "is_special": False,
             }
         elif s.special_session_type:
@@ -207,6 +235,7 @@ def schedule_page(request):
         st_map[sid].append(tid)
     for s in sessions:
         s.topic_ids_str = ",".join(str(t) for t in st_map.get(s.id, []))
+        s.is_first_time_presenter = _is_first_time_presenter(s.speaker_1_first_time)
 
     special_session_types = list(
         SpecialSessionType.objects.filter(event_code=event_code)
@@ -228,7 +257,14 @@ def schedule_page(request):
         .order_by("subject_code")
         .values("subject_id", "subject_code", "subject_desc")
     )
-    return render(
+    # Distinct planner_session.session_type (string column), current event only
+    st_raw = Session.objects.filter(event_code=event_code).values_list(
+        "session_type_label", flat=True
+    )
+    session_type_strings = sorted(
+        {str(x).strip() for x in st_raw if x is not None and str(x).strip() != ""}
+    )
+    response = render(
         request,
         "planner/planner.html",
         {
@@ -237,10 +273,15 @@ def schedule_page(request):
             "session_types": session_types,
             "topics": topics,
             "subjects": subjects,
+            "session_type_strings": session_type_strings,
             "is_authenticated": request.user.is_authenticated,
             "event_code": event_code,
         },
     )
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 @require_http_methods(["GET"])
@@ -295,10 +336,12 @@ def api_day(request, day):
                 "code": s.session_code or "",
                 "title": s.title or "",
                 "speaker_full": getattr(s, "speaker_full_name", lambda: "")(),
-                "speaker_company": getattr(s, "speaker_company", "") or "",
+                "speaker_company": getattr(s, "speaker_1_company", "") or "",
                 "subject": (s.subject.subject_code or "") if s.subject else "",
-                "color": s.session_type.color,
+                "color": s.session_type.color if s.session_type else "#e7f1ff",
                 "session_type_id": s.session_type_id,
+                "rating": float(s.rating) if s.rating is not None else 0.0,
+                "is_first_time_presenter": _is_first_time_presenter(s.speaker_1_first_time),
                 "is_special": False,
             }
         elif slot.special_session_type:
@@ -442,28 +485,21 @@ def api_assign(request):
 
     # Normal session assign
     session_id = int(session_id)
-    session = Session.objects.get(id=session_id, event_code=event_code)
+    try:
+        session = Session.objects.get(id=session_id, event_code=event_code)
+    except Session.DoesNotExist:
+        return JsonResponse({
+            "ok": False,
+            "message": "Session not found. It may have been removed (e.g. after a CSV import). Please refresh the page.",
+            "logs": [],
+        }, status=400)
 
-    target_session = CalendarSlot.objects.filter(
-        event_code=event_code,
-        layout=layout,
-        session__speaker_first_name=session.speaker_first_name,
-        session__speaker_last_name=session.speaker_last_name,
-    ).first()
-    if not target_session:
-        conflict_session = CalendarSlot.objects.filter(
-            event_code=event_code,
-            layout__day__id=layout.day.id,
-            layout__time_slot__id=layout.time_slot.id,
-            session__speaker_first_name=session.speaker_first_name,
-            session__speaker_last_name=session.speaker_last_name,
-        ).exclude(session=session)
-        if conflict_session.exists():
-            return JsonResponse({
-                "ok": False,
-                "message": f"The speaker {session.speaker_full_name()} is already assigned to another session at this time.",
-                "logs": []
-            })
+    if _speaker_conflict_at_time(event_code, session, layout):
+        return JsonResponse({
+            "ok": False,
+            "message": f"The speaker {session.speaker_full_name()} is already assigned to another session at this time.",
+            "logs": []
+        })
 
     other = (
         CalendarSlot.objects
@@ -620,7 +656,8 @@ def api_move(request):
         return err
     """
     Move from one calendar cell to another in one request.
-    One transaction_id for all log entries so undo reverts the full move (unassign source + assign target).
+    One transaction_id for all log entries so undo reverts the full move.
+    When the target cell is filled with another normal session, swap both sessions (2 unassign + 2 assign).
     """
     try:
         data = json.loads(request.body)
@@ -760,29 +797,36 @@ def api_move(request):
 
     # Normal session
     session_id = int(session_id)
-    session = Session.objects.get(id=session_id, event_code=event_code)
-    target_session = CalendarSlot.objects.filter(
-        event_code=event_code,
-        layout=target_layout,
-        session__speaker_first_name=session.speaker_first_name,
-        session__speaker_last_name=session.speaker_last_name,
-    ).first()
-    if not target_session:
-        conflict = CalendarSlot.objects.filter(
-            event_code=event_code,
-            layout__day=target_layout.day,
-            layout__time_slot=target_layout.time_slot,
-            session__speaker_first_name=session.speaker_first_name,
-            session__speaker_last_name=session.speaker_last_name,
-        ).exclude(session=session)
-        if conflict.exists():
-            return JsonResponse({
-                "ok": False,
-                "message": f"The speaker {session.speaker_full_name()} is already assigned to another session at this time.",
-                "logs": logs,
-            })
-    if target_slot.session and target_slot.session != session:
-        prev = target_slot.session
+    try:
+        session = Session.objects.get(id=session_id, event_code=event_code)
+    except Session.DoesNotExist:
+        return JsonResponse({
+            "ok": False,
+            "message": "Session not found. It may have been removed (e.g. after a CSV import). Please refresh the page.",
+            "logs": logs,
+        }, status=400)
+    displaced_session = (
+        target_slot.session
+        if target_slot.session_id and target_slot.session_id != session.id
+        else None
+    )
+    swap_mode = displaced_session is not None
+
+    if _speaker_conflict_at_time(event_code, session, target_layout):
+        return JsonResponse({
+            "ok": False,
+            "message": f"The speaker {session.speaker_full_name()} is already assigned to another session at this time.",
+            "logs": logs,
+        })
+    if swap_mode and _speaker_conflict_at_time(event_code, displaced_session, source_layout):
+        return JsonResponse({
+            "ok": False,
+            "message": f"The speaker {displaced_session.speaker_full_name()} is already assigned to another session at this time.",
+            "logs": logs,
+        })
+
+    if swap_mode:
+        prev = displaced_session
         log_obj = ActionLog.objects.create(
             message=f"{layout.label} ({prev.session_code}) →",
             action_type="unassign",
@@ -794,34 +838,82 @@ def api_move(request):
             transaction_id=transaction_id,
         )
         logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
-    if target_slot.special_session_type:
-        prev_st = target_slot.special_session_type
+        target_slot.session = session
+        target_slot.special_session_type = None
+        target_slot.description = None
+        target_slot.save()
         log_obj = ActionLog.objects.create(
-            message=f"{layout.label} ({prev_st.name}) →",
-            action_type="unassign",
+            message=f"{session.session_code} → {layout.label}",
+            action_type="assign",
             event_code=event_code,
             layout=layout,
-            special_session_type=prev_st,
+            session=session,
             day=layout.day,
             track=layout.track,
             transaction_id=transaction_id,
         )
         logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
-    target_slot.session = session
-    target_slot.special_session_type = None
-    target_slot.description = None
-    target_slot.save()
-    log_obj = ActionLog.objects.create(
-        message=f"{session.session_code} → {layout.label}",
-        action_type="assign",
-        event_code=event_code,
-        layout=layout,
-        session=session,
-        day=layout.day,
-        track=layout.track,
-        transaction_id=transaction_id,
-    )
-    logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
+
+        source_slot, _ = CalendarSlot.objects.select_for_update().get_or_create(
+            layout=source_layout, defaults={"event_code": event_code}
+        )
+        source_slot.session = displaced_session
+        source_slot.special_session_type = None
+        source_slot.description = None
+        source_slot.save()
+        log_obj = ActionLog.objects.create(
+            message=f"{displaced_session.session_code} → {source_layout.label}",
+            action_type="assign",
+            event_code=event_code,
+            layout=source_layout,
+            session=displaced_session,
+            day=source_layout.day,
+            track=source_layout.track,
+            transaction_id=transaction_id,
+        )
+        logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
+    else:
+        if target_slot.session and target_slot.session != session:
+            prev = target_slot.session
+            log_obj = ActionLog.objects.create(
+                message=f"{layout.label} ({prev.session_code}) →",
+                action_type="unassign",
+                event_code=event_code,
+                layout=layout,
+                session=prev,
+                day=layout.day,
+                track=layout.track,
+                transaction_id=transaction_id,
+            )
+            logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
+        if target_slot.special_session_type:
+            prev_st = target_slot.special_session_type
+            log_obj = ActionLog.objects.create(
+                message=f"{layout.label} ({prev_st.name}) →",
+                action_type="unassign",
+                event_code=event_code,
+                layout=layout,
+                special_session_type=prev_st,
+                day=layout.day,
+                track=layout.track,
+                transaction_id=transaction_id,
+            )
+            logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
+        target_slot.session = session
+        target_slot.special_session_type = None
+        target_slot.description = None
+        target_slot.save()
+        log_obj = ActionLog.objects.create(
+            message=f"{session.session_code} → {layout.label}",
+            action_type="assign",
+            event_code=event_code,
+            layout=layout,
+            session=session,
+            day=layout.day,
+            track=layout.track,
+            transaction_id=transaction_id,
+        )
+        logs.append({"id": log_obj.id, "time": log_obj.timestamp.isoformat(), "message": log_obj.message, "comment": log_obj.comment or ""})
     return JsonResponse({
         "ok": True,
         "logs": logs,
@@ -877,7 +969,7 @@ def api_undo(request):
     logs = (
         ActionLog.objects.filter(event_code=event_code, transaction_id=last_tx)
         .select_related("layout", "session", "special_session_type")
-        .order_by("-timestamp")
+        .order_by("-timestamp", "-id")
     )
 
     undone_logs = []

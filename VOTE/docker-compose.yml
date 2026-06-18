@@ -5,7 +5,7 @@ services:
   webmoderator:
     build: ./moderator_app
     env_file:
-      - ./moderator_app/.env
+      - ./moderator_app/.env_docker
     image: moderator-web-img
     container_name: moderatorweb
     restart: always
@@ -23,7 +23,7 @@ services:
   webvote:
     build: ./vote_app
     env_file:
-      - ./vote_app/.env
+      - ./vote_app/.env_docker
     image: vote-web-img
     container_name: voteweb
     restart: always
@@ -36,6 +36,26 @@ services:
       - "traefik.http.routers.webvote.entrypoints=websecure"
       - "traefik.http.routers.webvote.tls.certresolver=letsencrypt"
       - "traefik.http.services.webvote.loadbalancer.server.port=9000"
+
+  # Gribuilder App
+  webgridbuilder:
+    build: ./gridbuilder
+    env_file:
+      - ./gridbuilder/.env_docker
+    image: gridbuilder-web-img
+    container_name: gridbuilderweb
+    restart: always
+    expose:
+      - "9200"
+    command: gunicorn gridbuilder.wsgi:application --bind 0.0.0.0:9200 --workers 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webgridbuilder.rule=Host(\"gridbuilder.idugemea.eu\")"
+      - "traefik.http.routers.webgridbuilder.entrypoints=websecure"
+      - "traefik.http.routers.webgridbuilder.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webgridbuilder.loadbalancer.server.port=9200"
+
+
 
   # Traefik Reverse Proxy
   traefik:

@@ -2,7 +2,7 @@ from rest_framework import status
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
 
-from ..selection.models import Moderators, Moderator, Session
+from ..selection.models import Moderators, Moderator, Session, CurrentEvent
 from ..selection.utils import init_response_context
 
 
@@ -11,7 +11,13 @@ def get_modal_edit_value(request):
         session_id = request.POST.get('session_id')
         is_mobile = request.headers.get('X-Mobile-View') == 'true'
 
-        mod = Moderators.objects.all().filter(session_code=session_id)
+        current_event = CurrentEvent.objects.filter(is_active=True).first()
+        if not current_event:
+            return JsonResponse({'message': 'An error occurred - No data'}, status=400)
+
+        session_event = current_event.session_event
+
+        mod = Moderators.objects.filter(session_event=session_event, session_code=session_id)
 
         if len(mod) == 1:
             context = init_response_context(request)
@@ -27,7 +33,7 @@ def get_modal_edit_value(request):
             })
 
             # Optional: fetch moderator_email if it exists
-            ses = Moderator.objects.filter(session_code=session_id).first()
+            ses = Moderator.objects.filter(session_event=session_event, session_code=session_id).first()
             if ses:
                 context['moderator_email'] = ses.moderator_email
 
@@ -49,55 +55,51 @@ def update_modal_edit_value(request):
     if request.method == 'POST':
         session_id = request.POST.get('session_id')
 
-        mod = Moderator.objects.all().filter(session_code=session_id)
+        current_event = CurrentEvent.objects.filter(is_active=True).first()
+        if not current_event:
+            return JsonResponse({'message': 'An error occurred - No data'}, status=400)
 
-        if len(mod) == 1:
-            for i in mod:
-                i.moderator_name = request.POST.get('moderator_name') if request.POST.get('moderator_name') != '' else None
-                i.moderator_email = request.POST.get('moderator_email') if request.POST.get('moderator_email') != '' else None
-                i.save()
+        session_event = current_event.session_event
 
-            if request.POST.get('moderator_name') != '' or request.POST.get('moderator_email') != '':
-                ses = Session.objects.all().filter(session_code=session_id)
-                if len(ses) == 1:
-                    for i in ses:
-                        i.moderator_status_id = 1
-                        i.save()
+        moderator_name = request.POST.get('moderator_name') or None
+        moderator_email = request.POST.get('moderator_email') or None
+
+        mod = Moderator.objects.filter(session_event=session_event, session_code=session_id).first()
+
+        if moderator_name or moderator_email:
+            if mod:
+                Moderator.objects.filter(
+                    session_event=session_event,
+                    session_code=session_id
+                ).update(moderator_name=moderator_name, moderator_email=moderator_email)
+
             else:
-                ses = Session.objects.all().filter(session_code=session_id)
-                if len(ses) == 1:
-                    for i in ses:
-                        i.moderator_status_id = 0
-                        i.save()
-
-                mod.delete()
-
-            context = init_response_context(request)
-            context['message'] = 'OK'
-
-            return JsonResponse(context, status=status.HTTP_200_OK)
-        else:
-            if request.POST.get('moderator_name') != '' or request.POST.get('moderator_email') != '':
-                mod = Moderator.objects.create(
-                    session_event="EMEA2025",
+                Moderator.objects.create(
+                    session_event=session_event,
                     session_code=session_id,
-                    moderator_name = request.POST.get('moderator_name') if request.POST.get('moderator_name') != '' else None,
-                    moderator_email = request.POST.get('moderator_email') if request.POST.get('moderator_email') != '' else None
+                    moderator_name=moderator_name,
+                    moderator_email=moderator_email
                 )
 
+            Session.objects.filter(
+                session_event=session_event,
+                session_code=session_id
+            ).update(moderator_status_id=1)
 
-                ses = Session.objects.all().filter(session_code=session_id)
-                if len(ses) == 1:
-                    for i in ses:
-                        i.moderator_status_id = 1
-                        i.save()
+        else:
+            if mod:
+                mod.delete()
 
+            Session.objects.filter(
+                session_event=session_event,
+                session_code=session_id
+            ).update(moderator_status_id=0)
 
+        context = init_response_context(request)
+        context['message'] = 'OK'
 
-            context = init_response_context(request)
-            context['message'] = 'OK'
+        return JsonResponse(context, status=status.HTTP_200_OK)
 
-            return JsonResponse(context, status=status.HTTP_200_OK)
     else:
         content = {
             'message': 'An error occured'

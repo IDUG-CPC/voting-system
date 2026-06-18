@@ -1,5 +1,24 @@
     body { background-color: #f8f9fa; }
 
+    body.planner-busy {
+      overflow: hidden;
+    }
+
+    .planner-busy-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(33, 37, 41, 0.55);
+      backdrop-filter: blur(2px);
+    }
+
+    .planner-busy-overlay.d-none {
+      display: none !important;
+    }
+
     /* === Banner background === */
     .planner-hero {
       position: relative;
@@ -74,6 +93,56 @@
     .exit-link {
       display: inline-flex;
       line-height: 0;
+    }
+
+    /* CSV import modal: title, 1 line stats, 1 line label, scrollable table block (horizontal), choose another file */
+    .csv-import-modal-dialog {
+      max-width: min(800px, 95vw);
+    }
+    #csvImportModal .modal-content {
+      overflow: hidden;
+      max-width: 100%;
+    }
+    #csvImportModal .modal-body {
+      overflow: hidden;
+      max-width: 100%;
+      min-width: 0;
+    }
+    .csv-import-step2 {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+    /* Scroll container: fixed width (parent), table inside inner so it cannot expand this div */
+    .csv-preview-scroll {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      max-height: 240px;
+      overflow-x: scroll;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .csv-preview-scroll-inner {
+      display: inline-block;
+      min-width: 100%;
+      width: max-content;
+    }
+    .csv-preview-scroll .csv-preview-table {
+      width: max-content;
+      min-width: 100%;
+    }
+    .csv-preview-scroll .csv-preview-table thead th,
+    .csv-preview-scroll .csv-preview-table tbody td {
+      width: 130px;
+      max-width: 130px;
+      min-width: 90px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-sizing: border-box;
     }
 
     .exit-icon {
@@ -216,13 +285,26 @@
       border-color: #9eb9e0;
     }
 
-    /* Grid cell: session block with optional pencil */
+    /* Grid cell: session block with optional pencil / rating */
     .cell-session-wrap {
       position: relative;
       min-height: 100%;
       border-radius: 4px;
-      padding: 6px;
-      padding-right: 28px;
+      padding: 6px 34px 6px 6px;
+    }
+    .cell-session-wrap .session-rating {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      line-height: 1;
+      color: #212529;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #itemList .item {
+      position: relative;
     }
     .cell-session-wrap .item {
       margin: 0;
@@ -379,6 +461,10 @@
 
     /* Tabs + Undo */
     .nav-tabs .nav-link { cursor: pointer; }
+    .nav-tabs .nav-link.drag-over-tab {
+      background: #cfe2ff;
+      border-color: #86b7fe;
+    }
     #undoBtn { font-size: 0.85rem; padding: 2px 8px; }
 
     /* Right panel layout */
@@ -462,7 +548,7 @@
       font-size: 1.75rem;
       font-weight: 600;
       margin: 0;
-      color: #084298;  /* IDUG blue */
+      color: #084298;
     }
 
     .splash-form .form-label {

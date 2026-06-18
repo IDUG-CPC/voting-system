@@ -1,10 +1,15 @@
 from django.urls import path
 from . import views
+from . import views_excel
+from . import views_csv
 
 app_name = "planner"
 
 urlpatterns = [
     path("", views.schedule_page, name="schedule"),
+    path("export-excel/", views_excel.export_excel, name="export_excel"),
+    path("api/csv-preview/", views_csv.csv_preview, name="csv_preview"),
+    path("api/csv-import/", views_csv.csv_import, name="csv_import"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
 

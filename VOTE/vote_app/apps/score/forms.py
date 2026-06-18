@@ -18,3 +18,10 @@ class LoginForm(forms.Form):
                 "class": "form-control"
             }
         ))
+
+    session_event = forms.ChoiceField(
+        choices=[],
+        widget=forms.Select(attrs={
+            "class": "form-control"
+        }
+    ))

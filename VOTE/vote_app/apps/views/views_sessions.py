@@ -30,10 +30,14 @@ def refresh_sessions(request):
 
         context = init_response_context(request)
 
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
         if 'sessions' in x.url and 'page=' in x.url:
             pos = x.url.index('page=') + len('page=')
             page = x.url[pos:]
-            sessions_items = Moderators.objects.all().order_by('date', 'session_time', 'session_code')
+            sessions_items = Moderators.objects.filter(session_event=event).order_by('date', 'session_time', 'session_code')
 
             sessions = SessionTable(sessions_items)
 
@@ -42,7 +46,7 @@ def refresh_sessions(request):
             sessions.page = sessions.page.paginator.get_page(page)
 
         else:
-            sessions_items = Moderators.objects.all().order_by('date', 'session_time', 'session_code')
+            sessions_items = Moderators.objects.filter(session_event=event).order_by('date', 'session_time', 'session_code')
 
             sessions = SessionTable(sessions_items)
 
@@ -66,8 +70,12 @@ def check_session_code(request):
 
         context = init_response_context(request)
 
-        session = Session.objects.all().filter(session_code=x.sessioncode).values()
-        moderator = Moderators.objects.all().filter(session_code=x.sessioncode).values()
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        session = Session.objects.filter(session_event=event).filter(session_code=x.sessioncode).values()
+        moderator = Moderators.objects.filter(session_event=event).filter(session_code=x.sessioncode).values()
 
         if session:
             context['exists'] = True
@@ -102,16 +110,36 @@ def update_attendees(request):
 
         context = init_response_context(request)
 
-        session = Session.objects.get(session_code=x.sessioncode)
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        session = Session.objects.get(session_event=event,session_code=x.sessioncode)
 
         if session:
-            session.start_count = x.attendees if x.attendees else None
-            session.mid_count = x.attendees20 if x.attendees20 else None
-            session.save()
+            #session.start_count = x.attendees if x.attendees else None
+            #session.mid_count = x.attendees20 if x.attendees20 else None
+            #session.save()
 
-            context['message'] = 'OK'
+            updated = (
+                Session.objects
+                .filter(session_event=event, session_code=x.sessioncode)
+                .update(
+                    start_count=int(x.attendees) if x.attendees else None,
+                    mid_count=int(x.attendees20) if x.attendees20 else None,
+                )
+            )
 
-            return JsonResponse(context, status=status.HTTP_200_OK)
+            if updated == 1:
+                context['message'] = 'OK'
+
+                return JsonResponse(context, status=status.HTTP_200_OK)
+            else:
+                content = {
+                    'message': 'An error occured'
+                }
+                return JsonResponse(content, status=status.HTTP_400_BAD_REQUEST)
+
         else:
             content = {
                 'message': 'An error occured'

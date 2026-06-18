@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
-WORKDIR /usr/src/vote_app
+WORKDIR /usr/src/moderator_app
 
 # Copy app source
 COPY . .

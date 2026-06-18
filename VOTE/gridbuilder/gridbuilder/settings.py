@@ -11,15 +11,20 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 import environ
-
-
-env = environ.Env()
-# reading .env file
-environ.Env.read_env()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env()
+
+env_file = BASE_DIR / "gridbuilder" / ".env_dev"
+
+# reading .env file
+environ.Env.read_env(env_file)
+
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -36,6 +41,8 @@ TEMPLATE_DEBUG = DEBUG
 ALLOWED_HOSTS = env("ALLOWED_HOSTS").split(',')
 ADMIN_INTERFACE = env("ADMIN_INTERFACE")
 
+# Assets Management
+ASSETS_ROOT = env("ASSETS_ROOT")
 
 # Application definition
 
@@ -57,6 +64,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'gridbuilder.urls'
@@ -137,7 +145,28 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+
+# Extra places for collectstatic to find static files.
+STATICFILES_DIRS = (
+    os.path.join(BASE_DIR, 'planner/static'),
+)
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'planner/static/assets')
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_COOKIE_SECURE = True
+# Optional, only if you want to explicitly scope cookie domain
+# CSRF_COOKIE_DOMAIN = "moderator.idugemea.eu"
+
+USE_X_FORWARDED_HOST = True
+
+CSRF_TRUSTED_ORIGINS = ['https://gridbuilder.idugemea.eu']
+
+LOGIN_URL = '/planner'

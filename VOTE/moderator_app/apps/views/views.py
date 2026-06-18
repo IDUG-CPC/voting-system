@@ -15,7 +15,7 @@ import math
 #from ..authentication.views import login_view as login
 
 from ..selection.utils import RequestParameters, retrieve_value_from_session, init_response_context
-from ..selection.models import Moderators
+from ..selection.models import Moderators, CurrentEvent
 from django.http import JsonResponse
 from rest_framework import status
 
@@ -33,6 +33,9 @@ def moderator(request):
     Handles full page load for the moderator page.
     Includes search box and initial table render.
     """
+    current_event = CurrentEvent.objects.filter(is_active=True).first()
+    event_available = bool(current_event)
+
     search = request.GET.get('search')
     if not search:
         search = request.session.get('currentSearch', '')
@@ -40,24 +43,43 @@ def moderator(request):
     # Save current search to session
     request.session['currentSearch'] = search
 
-    # Filter queryset
-    if search:
-        sessions_items = Moderators.objects.filter(search__icontains=search).order_by('date', 'session_time', 'session_code')
-    else:
-        sessions_items = Moderators.objects.all().order_by('date', 'session_time', 'session_code')
+    unassigned = request.GET.get('unassigned')
+    if not unassigned:
+        unassigned = request.session.get('unassigned', '0')
 
-    # Build table
-    sessions = ModeratorsTable(sessions_items)
-    # Decide pagination only for table (desktop)
-    paginate = {"per_page": 10}
-    if request.headers.get('X-Mobile-View') == 'true':
-        paginate = {}  # Show all in mobile
-    RequestConfig(request, paginate=paginate).configure(sessions)
+    unassigned = unassigned == '1'
+
+    sessions = None  # default when unavailable
+
+    if event_available:
+        sessions_items = Moderators.objects.filter(session_event=current_event.session_event)
+
+        # Filter queryset
+        if search:
+            sessions_items = sessions_items.filter(search__icontains=search).order_by('date', 'session_time', 'session_code')
+        else:
+            sessions_items = sessions_items.all().order_by('date', 'session_time', 'session_code')
+
+        if unassigned:
+            sessions_items = sessions_items.filter(moderator_name__isnull=True)
+
+        # Build table
+        sessions = ModeratorsTable(sessions_items)
+        # Decide pagination only for table (desktop)
+        paginate = {"per_page": 10}
+        if request.headers.get('X-Mobile-View') == 'true':
+            paginate = {}  # Show all in mobile
+        RequestConfig(request, paginate=paginate).configure(sessions)
+
+
 
     context = {
         'segment': 'moderator',
+        'current_event': current_event,
+        'moderator_available': event_available,
         'currentSearch': search,
-        'items': sessions,  # Initial render of the table
+        'unassigned': unassigned,
+        'items': sessions if current_event else None,
     }
 
     template = loader.get_template('home/moderator.html')
@@ -72,11 +94,19 @@ def refresh_moderators(request):
     Handles AJAX requests for table refresh (search / pagination).
     """
     if request.method == 'POST':
+        current_event = CurrentEvent.objects.filter(is_active=True).first()
+        if not current_event:
+            # Return the unavailable fragment
+            return render(request, 'tables/moderator_unavailable.html')
+
+
         x = RequestParameters()
-        for key in ['url', 'search']:
+        for key in ['url', 'search', 'unassigned']:
             setattr(x, key, retrieve_value_from_session(request, key))
 
         request.session['currentSearch'] = x.search  # persist search
+
+        unassigned = x.unassigned == '1'
 
         # Detect mobile view from header
         is_mobile = request.headers.get('X-Mobile-View') == 'true'
@@ -88,13 +118,17 @@ def refresh_moderators(request):
         else:
             page = 1
 
+        sessions_items = Moderators.objects.filter(session_event=current_event.session_event)
+
         # Filter queryset
         if x.search:
-            sessions_items = Moderators.objects.filter(
-                search__icontains=x.search
-            ).order_by('date', 'session_time', 'session_code')
+            sessions_items = sessions_items.filter(search__icontains=x.search).order_by('date', 'session_time', 'session_code')
         else:
-            sessions_items = Moderators.objects.all().order_by('date', 'session_time', 'session_code')
+            sessions_items = sessions_items.all().order_by('date', 'session_time', 'session_code')
+
+        if unassigned:
+            sessions_items = sessions_items.filter(moderator_name__isnull=True)
+
 
         # Build table
         sessions = ModeratorsTable(sessions_items)

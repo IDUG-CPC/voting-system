@@ -8,6 +8,8 @@ from django.http import HttpResponse
 
 from django.contrib.auth import authenticate
 from ..score.forms import LoginForm
+from ..score.models import Session
+from django.db.models import Min
 
 
 def login(request):
@@ -19,17 +21,29 @@ def login(request):
 
         msg = None
 
+        session_events = (
+            Session.objects
+            .values_list("session_event", flat=True)
+            .annotate(first_ts=Min("session_date"))
+            .order_by("-first_ts")
+        )
+
+        events = list(session_events)
+        form.fields["session_event"].choices = [(e, e) for e in events]
+
         if request.method == "POST":
 
             if form.is_valid():
                 username = form.cleaned_data.get("username")
                 password = form.cleaned_data.get("password")
+                session_event = form.cleaned_data["session_event"]
 
-                request.session['building_process'] = request.POST.get('building_process', '')
+                #request.session['building_process'] = request.POST.get('building_process', '')
 
                 user = authenticate(username=username, password=password)
                 if user is not None:
                     django_login(request, user)
+                    request.session["session_event"] = session_event
                     return redirect("/")
                 else:
                     msg = 'Invalid credentials'

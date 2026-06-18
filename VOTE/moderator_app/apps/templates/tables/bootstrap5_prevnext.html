@@ -5,20 +5,9 @@
   <thead {{ table.attrs.thead.as_html }}>
     <tr>
       {% for column in table.columns %}
-        {% if column.name == "moderator_name" %}
-          <th {{ column.attrs.th.as_html }}>
-            <select id="moderatorFilter" class="form-select form-select-sm">
-              <option value="all">Moderator</option>
-              <option value="John">John</option>
-              <option value="Mary">Mary</option>
-              <option value="none">(No moderator)</option>
-            </select>
-          </th>
-        {% else %}
           <th {{ column.attrs.th.as_html }}>
             {{ column.header }}
           </th>
-        {% endif %}
       {% endfor %}
     </tr>
   </thead>

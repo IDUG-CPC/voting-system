@@ -9,47 +9,62 @@
 {% load static %}
 
 <style>
-        .content {
-            background-image:
-              radial-gradient(at center center,#23A9DC66 18%,#1B449499 100%),
-			  url('{{ ASSETS_ROOT }}/vote/background.png');
+.idug-banner {
+    position: relative;
+    width: 100%;
+    height: 320px;
 
-			background-size: cover;
-			background-color: transparent;
-			background-position: center;
+    /* GREYED banner background */
+    background-image:
+        linear-gradient(
+            rgba(200, 215, 225, 0.35),
+            rgba(200, 215, 225, 0.35)
+        ),
+        url('{{ ASSETS_ROOT }}/vote/banner.png');
 
-        }
-		.container {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 
-			display: block;
-			margin-left: 38%;
-			margin-right: auto
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-		}
-		.wrapper {
-		    position: relative;
-            display: -webkit-box;
-            display: -ms-flexbox;
-            display: flex;
-            -webkit-box-align: center;
-                -ms-flex-align: center;
+.idug-banner-logo {
+    height: 140px;
+    width: auto;
+    max-width: 90%;
 
-            -webkit-box-pack: center;
-                -ms-flex-pack: center;
-                    justify-content: center;
-            overflow: hidden;
-            min-width: 100%;
-            min-height: 100vh;
-		}
+    /* no color changes */
+    filter: drop-shadow(0 6px 18px rgba(0,0,0,0.35));
+}
+
+
+.wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    min-width: 100%;
+    min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+    .idug-banner {
+        height: 180px;
+    }
+}
 </style>
 
 <div >
 
-	<div  class="content">
-		<div class="card-body text-center" >
-			<img  src="{{ ASSETS_ROOT }}/vote/idug-emea-2025_header.jpg">
-            		</div>
-	</div>
+	<div class="idug-banner">
+        <img
+            src="{{ ASSETS_ROOT }}/vote/idug-logo-since.png"
+            class="idug-banner-logo"
+        >
+    </div>
 
     <br />
     <br />
@@ -83,6 +98,10 @@
                         
                         <div class="input-group mb-4">
                             {{ form.password }}
+                        </div>
+
+                        <div class="input-group mb-4">
+                            {{ form.session_event }}
                         </div>
                         
                         <button type="submit" name="login" class="btn btn-primary shadow-2 mb-4">Login</button>

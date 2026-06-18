@@ -18,6 +18,16 @@ class Subject(models.Model):
         db_table = 'SUBJECT'
 
 
+class CurrentEvent(models.Model):
+    session_event = models.CharField(db_column='SESSION_EVENT', primary_key=True, max_length=10)
+    event_city = models.CharField(db_column='EVENT_CITY', max_length=30)
+    event_date = models.CharField(db_column='EVENT_DATE', max_length=30)
+    is_active = models.BooleanField(db_column='IS_ACTIVE')
+
+    class Meta:
+        managed = False
+        db_table = 'CURRENT_EVENT'
+
 
 class Session(models.Model):
     session_event = models.CharField(db_column='SESSION_EVENT', max_length=10)  # Field name made lowercase.

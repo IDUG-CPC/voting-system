@@ -11,7 +11,11 @@ def get_modal_edit_value(request):
     if request.method == 'POST':
         sessioneval_id = request.POST.get('sessioneval_id')
 
-        evals = Score.objects.all().filter(score_id=sessioneval_id)
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        evals = Score.objects.filter(session_event=event).filter(score_id=sessioneval_id)
 
         if len(evals) == 1:
 
@@ -42,7 +46,11 @@ def update_modal_edit_value(request):
     if request.method == 'POST':
         sessioneval_id = request.POST.get('sessioneval_id')
 
-        evals = Score.objects.all().filter(score_id=sessioneval_id)
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        evals = Score.objects.filter(session_event=event).filter(score_id=sessioneval_id)
 
         if len(evals) == 1:
 
@@ -76,7 +84,11 @@ def get_modal_delete_value(request):
     if request.method == 'POST':
         sessioneval_id = request.POST.get('sessioneval_id')
 
-        evals = Score.objects.all().filter(score_id=sessioneval_id)
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        evals = Score.objects.filter(session_event=event).filter(score_id=sessioneval_id)
 
         if len(evals) == 1:
 
@@ -108,7 +120,11 @@ def delete_modal_edit_value(request):
     if request.method == 'POST':
         sessioneval_id = request.POST.get('sessioneval_id')
 
-        evals = Score.objects.all().filter(score_id=sessioneval_id)
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
+        evals = Score.objects.filter(session_event=event).filter(score_id=sessioneval_id)
 
         if len(evals) == 1:
 

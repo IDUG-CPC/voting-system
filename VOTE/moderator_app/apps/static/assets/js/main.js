@@ -40,7 +40,7 @@ function refresh_moderator_table(resetPage = false) {
         window.history.replaceState({}, '', url);
     }
 
-    const moderatorFilter = $('#moderatorFilter').val() || 'all';
+    const unassigned = url.searchParams.get('unassigned') || '0';
     const currentSearch = $('#search').val() || '';
 
     $.ajax({
@@ -55,11 +55,13 @@ function refresh_moderator_table(resetPage = false) {
         data: {
             url: url.toString(),
             search: currentSearch,
-            moderator_filter: moderatorFilter
+            unassigned: unassigned
         },
 
         success: function(data) {
             $("#results_moderators").html(data);
+
+
         },
 
         error: function(xhr, errmsg, err) {

@@ -23,8 +23,12 @@ def add_values(request):
         for key in ['sessioncode', 'overall', 'speaker', 'material', 'expectation', 'comments' ]:
             setattr(x, key, retrieve_value_from_session(request, key))
 
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
         # trying to insert
-        sessioncode_id = Session.objects.get(session_event='EMEA2025', session_code=x.sessioncode)
+        sessioncode_id = Session.objects.get(session_event=event, session_code=x.sessioncode)
         new_eval = Score(session_event=sessioncode_id.session_event,
                          session_code=sessioncode_id.session_code,
                          overall_score=x.overall if x.overall else None,
@@ -67,10 +71,14 @@ def refresh_values(request):
 
         context = init_response_context(request)
 
+        event = request.session_event
+
+        # all()   ->  filter(session_event=event)
+
         if 'encode_values' in x.url and 'page=' in x.url:
             pos = x.url.index('page=') + len('page=')
             page = x.url[pos:]
-            eval_items = Score.objects.all().filter(session_code=x.sessioncode).order_by('-score_id')
+            eval_items = Score.objects.filter(session_event=event).filter(session_code=x.sessioncode).order_by('-score_id')
 
             #paginator = Paginator(eval_items, 5)
             #items = paginator.get_page(page)
@@ -83,7 +91,7 @@ def refresh_values(request):
             evals.page = evals.page.paginator.get_page(page)
 
         else:
-            eval_items = Score.objects.all().filter(session_code=x.sessioncode).order_by('-score_id')
+            eval_items = Score.objects.filter(session_event=event).filter(session_code=x.sessioncode).order_by('-score_id')
 
 
 
@@ -97,7 +105,7 @@ def refresh_values(request):
 
         context['items'] = evals
 
-        session = Session.objects.filter(session_code=x.sessioncode).first()
+        session = Session.objects.filter(session_event=event).filter(session_code=x.sessioncode).first()
         session_title = session.session_title if session else None
 
         request.session['session_code'] = x.sessioncode

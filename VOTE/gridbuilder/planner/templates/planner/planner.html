@@ -9,6 +9,9 @@
 
 {% block content %}
 
+{# CSRF for JS fetch() when user is authenticated (splash form is not rendered). #}
+<form class="d-none" aria-hidden="true">{% csrf_token %}</form>
+
 <div id="planner-wrapper" class="{% if not is_authenticated %}splash-blurred{% endif %}">
 <div class="planner-hero">
   <div class="planner-hero-bg"></div>
@@ -43,7 +46,9 @@
         <!-- Open/Import + Export Icon + Log out -->
         <div class="col-md-2 text-end d-flex align-items-center justify-content-end header-actions">
            <img src="{% static 'assets/images/open.png' %}" class="open-icon"  />
-           <img src="{% static 'assets/images/export.png' %}" class="export-icon" />
+           <a href="{% url 'planner:export_excel' %}" class="export-link" id="exportExcelLink" title="Export to Excel" aria-label="Export to Excel">
+           <img src="{% static 'assets/images/export.png' %}" class="export-icon" alt="Export to Excel" />
+           </a>
            {% if is_authenticated %}
            <a href="{% url 'planner:logout' %}" class="exit-link" title="Log out" aria-label="Log out">
              <img src="{% static 'assets/images/exit.png' %}" class="exit-icon" alt="Log out" />
@@ -96,6 +101,10 @@
               <select class="form-select form-select-sm" id="filterSubject" multiple size="3"></select>
             </div>
             <div class="col-12">
+              <label class="form-label small fw-semibold mb-1">Session</label>
+              <select class="form-select form-select-sm" id="filterSessionText" multiple size="3"></select>
+            </div>
+            <div class="col-12">
               <label class="form-label small fw-semibold mb-1">Topic</label>
               <select class="form-select form-select-sm" id="filterTopic" multiple size="3"></select>
             </div>
@@ -110,13 +119,16 @@
           <div id="itemList" class="scrollable-list">
             {% for s in sessions %}
               <div class="item"
-                   draggable="true"
+                   draggable="{% if s.status|default:'Pending'|lower == 'pending' %}true{% else %}false{% endif %}"
                    data-id="{{ s.id }}"
-                   data-type="{{ s.session_type.name }}"
-                   data-type-id="{{ s.session_type_id }}"
+                   data-type="{{ s.session_type.name|default:'' }}"
+                   data-type-id="{{ s.session_type_id|default:'' }}"
                    data-subject-id="{{ s.subject_id }}"
-                   data-topic-ids="{{ s.topic_ids_str|default:'' }}">
-                ({{ s.rating }}) - {{ s.session_code }} - {{ s.title }} ({{ s.speaker_full_name }}){% if s.subject %} ({{ s.subject.subject_code }}){% endif %}
+                   data-session-text="{{ s.session_type_label|default:'' }}"
+                   data-topic-ids="{{ s.topic_ids_str|default:'' }}"
+                   data-status="{{ s.status|default:'Pending' }}"
+                   data-first-time="{% if s.is_first_time_presenter %}1{% else %}0{% endif %}">
+                ({{ s.rating }}) - {{ s.session_code }} - {{ s.title }} ({% if s.is_first_time_presenter %}⭐ {% endif %}{{ s.speaker_full_name }}){% if s.subject %} ({{ s.subject.subject_code }}){% endif %}
               </div>
             {% endfor %}
           </div>
@@ -210,10 +222,61 @@
     </div>
 </div>
 
-
+<!-- CSV Import (Sessionboard) wizard modal -->
+<div class="modal fade" id="csvImportModal" tabindex="-1" aria-labelledby="csvImportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg csv-import-modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="csvImportModalLabel">Import from SessionBoard</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Step 1: File selection -->
+        <div id="csvImportStep1">
+          <label for="csvImportFile" class="form-label">Select a CSV file</label>
+          <input type="file" id="csvImportFile" class="form-control" accept=".csv" aria-describedby="csvImportFileHelp">
+          <div id="csvImportFileHelp" class="form-text">Only .csv files are accepted.</div>
+          <div id="csvImportStep1Error" class="alert alert-danger mt-2 small py-2" role="alert" style="display: none;"></div>
+        </div>
+        <!-- Step 2: title / 1 line stats / 1 line label / scrollable table block / choose another file -->
+        <div id="csvImportStep2" class="csv-import-step2" style="display: none;">
+          <p class="mb-1"><span class="badge bg-secondary">Rows: <span id="csvImportRowCount">0</span></span> <span class="badge bg-secondary">Columns: <span id="csvImportColCount">0</span></span></p>
+          <p class="small text-muted mb-2">Sample (first 3 rows)</p>
+          <div class="csv-preview-scroll border rounded p-2 bg-light">
+            <div class="csv-preview-scroll-inner">
+              <table class="table table-sm table-bordered mb-0 csv-preview-table">
+                <thead class="table-light">
+                  <tr id="csvImportThead"></tr>
+                </thead>
+                <tbody id="csvImportTbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="mt-2 mb-0 d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="csvImportChooseAnother">Choose another file</button>
+            <button type="button" class="btn btn-primary" id="csvImportRunBtn">Import</button>
+          </p>
+          <div id="csvImportStep2Error" class="alert alert-danger mt-2 small py-2" role="alert" style="display: none;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </div>
 <!-- end #planner-wrapper -->
+
+<div id="plannerBusyOverlay" class="planner-busy-overlay d-none" aria-hidden="true" role="alertdialog" aria-labelledby="plannerBusyMessage" aria-busy="true">
+  <div class="planner-busy-overlay-inner text-center text-white px-3">
+    <div class="spinner-border text-light mb-3" style="width: 3rem; height: 3rem;" role="status">
+      <span class="visually-hidden">Loading</span>
+    </div>
+    <p id="plannerBusyMessage" class="mb-0 fw-semibold">Please wait…</p>
+  </div>
+</div>
 
 {% if not is_authenticated %}
 <div id="splash-overlay" class="splash-overlay">
@@ -227,11 +290,11 @@
       <div id="splash-login-error" class="splash-error text-danger small mb-2" style="display: none;"></div>
       <div class="mb-2">
         <label for="splash-username" class="form-label">Username</label>
-        <input type="text" id="splash-username" name="username" class="form-control" autocomplete="username" required>
+        <input type="text" id="splash-username" name="username" class="form-control" autocomplete="username" required style="font-size: 16px; line-height: 1.5; min-height: 2.25rem; height: 2.25rem; padding: 0.375rem 0.75rem; box-sizing: border-box;">
       </div>
       <div class="mb-3">
         <label for="splash-password" class="form-label">Password</label>
-        <input type="password" id="splash-password" name="password" class="form-control" autocomplete="current-password" required>
+        <input type="password" id="splash-password" name="password" class="form-control" autocomplete="current-password" required style="font-size: 16px; line-height: 1.5; min-height: 2.25rem; height: 2.25rem; padding: 0.375rem 0.75rem; box-sizing: border-box;">
       </div>
       <div class="d-flex gap-2 flex-wrap justify-content-center">
         <button type="submit" class="btn btn-primary" id="splash-login-btn">Log in</button>
@@ -247,8 +310,14 @@
 {{ session_types|json_script:"session-types-data" }}
 {{ topics|json_script:"filter-topics-data" }}
 {{ subjects|json_script:"filter-subjects-data" }}
+{{ session_type_strings|json_script:"filter-session-type-strings-data" }}
 <script>
   window.READ_ONLY = false;
+  window.PLANNER_API = {
+    csvPreview: "{% url 'planner:csv_preview' %}",
+    csvImport: "{% url 'planner:csv_import' %}",
+    exportExcel: "{% url 'planner:export_excel' %}",
+  };
 </script>
 <script src="{% static 'assets/js/planner.js' %}"></script>
 {% endblock %}

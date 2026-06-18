@@ -62,8 +62,10 @@
     <div class="info-left">
         <img src="{{ ASSETS_ROOT }}/images/idug.png" >
         <div class="info-left-bottom">
-            <strong>Dusseldorf</strong><br>
-            October 26 - 30
+            {% if current_event %}
+              <strong>{{ current_event.event_city }}</strong><br>
+              {{ current_event.event_date }}
+            {% endif %}
         </div>
     </div>
 
@@ -80,7 +82,7 @@
     </div>
 </div>
 
-
+{% if moderator_available %}
 
                                 <div class="row mt-3">
                                     <div class="col-md-4">
@@ -91,17 +93,26 @@
                                     </div>
                                 </div>
 
-                                <!-- Mobile-only Moderator filter below search bar -->
-                                <div class="row d-md-none mb-3">
-                                  <div class="col-12">
-                                    <select id="mobileModeratorFilter" >
-                                      <option selected>Moderator</option>
-                                      <option>John</option>
-                                      <option>Mary</option>
-                                      <option>(No moderator)</option>
-                                    </select>
-                                  </div>
-                                </div>
+<div class="row mb-3">
+  <div class="col-12 col-md-auto">
+    <div class="form-check form-switch">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        id="toggle-unassigned"
+        {% if unassigned %}checked{% endif %}
+        onchange="toggleUnassigned(this)"
+      >
+      <label class="form-check-label" for="toggle-unassigned">
+        Unassigned only
+      </label>
+    </div>
+    <div class="text-muted small">
+      Show only sessions without a moderator
+    </div>
+  </div>
+</div>
+
 
 
                                 <div class="row">
@@ -113,6 +124,14 @@
 
                                     </div>
                                 </div>
+
+ {% else %}
+
+    <!-- UNAVAILABLE -->
+    {% include "tables/moderator_unavailable.html" %}
+
+{% endif %}
+
 
                             </div> <!-- card-block -->
                         </div> <!-- card -->
@@ -130,6 +149,7 @@
 {% endblock %}
 
 {% block javascripts %}
+{% if moderator_available %}
 <script>
     let currentSearch = '{{ currentSearch|default:'' }}';
     let lastSearch = currentSearch;
@@ -189,4 +209,22 @@
     });
 
 </script>
+<script>
+function toggleUnassigned(el) {
+    const url = new URL(window.location.href);
+
+    if (el.checked) {
+        url.searchParams.set('unassigned', '1');
+        url.searchParams.delete('page'); // reset pagination
+    } else {
+        url.searchParams.delete('unassigned');
+        url.searchParams.delete('page');
+    }
+
+    history.pushState(null, '', url.toString());
+    refresh_moderator_table(true);
+}
+</script>
+
+{% endif %}
 {% endblock %}

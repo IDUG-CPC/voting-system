@@ -141,7 +141,7 @@ class PlannerDay(models.Model):
 class Subject(models.Model):
     subject_id = models.BigAutoField(primary_key=True)
     event_code = models.CharField(max_length=10, default="EMEA")
-    subject_code = models.CharField(max_length=10, blank=True, null=True)
+    subject_code = models.CharField(max_length=20, blank=True, null=True)
     subject_desc = models.CharField(max_length=30, blank=True, null=True)
 
     class Meta:
@@ -181,21 +181,42 @@ class Session(models.Model):
     event_code = models.CharField(max_length=10, default="EMEA")
     session_code = models.CharField(max_length=20)
     title = models.CharField(max_length=250)
-    speaker_first_name = models.CharField(max_length=100, blank=True, null=True)
-    speaker_last_name = models.CharField(max_length=100, blank=True, null=True)
-    speaker_company = models.CharField(max_length=200, blank=True, null=True)
-    session_type = models.ForeignKey('SessionType', models.DO_NOTHING)
-    subject = models.ForeignKey('Subject', models.DO_NOTHING)
+    description = models.CharField(max_length=1000, blank=True, null=True)
+    speakers = models.CharField(max_length=200, blank=True, null=True)
+    submitter = models.CharField(max_length=100, blank=True, null=True)
+    audience = models.CharField(max_length=100, blank=True, null=True)
+    session_type_label = models.CharField(max_length=100, blank=True, null=True, db_column="session_type")
+    presentation = models.CharField(max_length=100, blank=True, null=True)
+    objective_1 = models.CharField(max_length=1000, blank=True, null=True)
+    speaker_1_email = models.CharField(max_length=100, blank=True, null=True)
+    speaker_1_first_name = models.CharField(max_length=100, blank=True, null=True)
+    speaker_1_last_name = models.CharField(max_length=100, blank=True, null=True)
+    speaker_1_title = models.CharField(max_length=100, blank=True, null=True)
+    speaker_1_company = models.CharField(max_length=200, blank=True, null=True)
+    speaker_1_first_time = models.CharField(max_length=50, blank=True, null=True)
+    speaker_2_email = models.CharField(max_length=100, blank=True, null=True)
+    speaker_2_first_name = models.CharField(max_length=100, blank=True, null=True)
+    speaker_2_last_name = models.CharField(max_length=100, blank=True, null=True)
+    speaker_2_title = models.CharField(max_length=100, blank=True, null=True)
+    speaker_2_company = models.CharField(max_length=200, blank=True, null=True)
+    speaker_2_first_time = models.CharField(max_length=50, blank=True, null=True)
+    session_type = models.ForeignKey(
+        "SessionType", models.DO_NOTHING, db_column="session_type_id", null=True, blank=True
+    )
+    subject = models.ForeignKey("Subject", models.DO_NOTHING, db_column="subject_id")
     rating = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    internal_comments = models.CharField(max_length=2000, blank=True, null=True)
+    external_comments = models.CharField(max_length=2000, blank=True, null=True)
+    status = models.CharField(max_length=64, blank=True, null=True)
 
     class Meta:
         managed = False
-        db_table = 'planner_session'
+        db_table = "planner_session"
         unique_together = (("event_code", "session_code"),)
 
     def speaker_full_name(self):
-        first = self.speaker_first_name or ""
-        last = self.speaker_last_name or ""
+        first = self.speaker_1_first_name or ""
+        last = self.speaker_1_last_name or ""
         return f"{first} {last}".strip()
 
     def __str__(self):
@@ -215,3 +236,36 @@ class SessionType(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class PlannerCompany(models.Model):
+    """Maps company substring (CSV Speaker 1 company) → planner_sessiontype.id per event_code."""
+
+    id = models.BigAutoField(primary_key=True)
+    company = models.CharField(max_length=200)
+    session_type = models.ForeignKey(
+        SessionType, models.DO_NOTHING, db_column="session_type_id"
+    )
+    event_code = models.CharField(max_length=10, default="EMEA")
+
+    class Meta:
+        managed = False
+        db_table = "planner_company"
+
+
+class PlannerExport(models.Model):
+    """
+    Grid Excel export versioning. Unique on (event_code, session_event, event_year).
+    Requires an `id` primary key column on planner_export for Django ORM (e.g. BIGSERIAL).
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    event_code = models.CharField(max_length=10)
+    session_event = models.CharField(max_length=10)
+    event_year = models.CharField(max_length=4)
+    event_version = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "planner_export"
+        unique_together = (("event_code", "session_event", "event_year"),)

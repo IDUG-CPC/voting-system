@@ -1,6 +1,45 @@
-const CSRF_TOKEN = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1];
+function _getCsrfToken() {
+  const raw = document.cookie.split("; ").find((r) => r.startsWith("csrftoken="));
+  if (raw) {
+    const v = raw.slice("csrftoken=".length);
+    try {
+      return decodeURIComponent(v);
+    } catch (e) {
+      return v;
+    }
+  }
+  const inp = document.querySelector("input[name=csrfmiddlewaretoken]");
+  return inp?.value || "";
+}
+const CSRF_TOKEN = _getCsrfToken();
+const CSV_PREVIEW_URL = window.PLANNER_API?.csvPreview || "/planner/api/csv-preview/";
+const CSV_IMPORT_URL = window.PLANNER_API?.csvImport || "/planner/api/csv-import/";
+const EXPORT_EXCEL_URL = window.PLANNER_API?.exportExcel || "/planner/export-excel/";
 let dragged = null, draggedFromCell = null;
+/** Persists drag data across day-tab switches (calendar DOM is rebuilt on loadDay). */
+let dragPayload = null;
+let dayTabHoverTimer = null;
+let dayTabHoverDayId = null;
+let dayTabsDragBound = false;
+const DAY_TAB_SWITCH_DELAY_MS = 400;
 const READ_ONLY = typeof window.READ_ONLY !== "undefined" && window.READ_ONLY;
+function formatSessionRating(rating) {
+  const n = Number(rating);
+  if (Number.isNaN(n)) return "0.00";
+  return n.toFixed(2);
+}
+
+function formatSpeakerDisplay(s) {
+  const name = s.speaker_full || "";
+  return s.is_first_time_presenter ? `⭐ ${name}` : name;
+}
+
+function appendRegularSessionDecorations(wrap, s) {
+  const ratingEl = document.createElement("span");
+  ratingEl.className = "session-rating";
+  ratingEl.textContent = formatSessionRating(s.rating);
+  wrap.appendChild(ratingEl);
+}
 
 let allSessions = [];
 let currentUsedSessions = [];
@@ -11,6 +50,7 @@ let itemListDropBound = false;
 let filterMode = "AND";
 let selectedTypeIds = [];
 let selectedSubjectIds = [];
+let selectedSessionTexts = [];
 let selectedTopicIds = [];
 
 function renderSessionTypeLegend(sessionTypes) {
@@ -100,21 +140,88 @@ function buildDayTabs(days) {
     btn.textContent = day.day;
 
     btn.addEventListener("click", () => {
-      document
-        .querySelectorAll("#dayTabs .nav-link")
-        .forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
+      activateDayTab(day.id);
       loadDay(day.id);
     });
+
+    attachDayTabDragHandlers(btn);
 
     li.appendChild(btn);
     tabs.appendChild(li);
   });
 
+  if (!READ_ONLY && !dayTabsDragBound) {
+    tabs.addEventListener("dragleave", (e) => {
+      if (!tabs.contains(e.relatedTarget)) {
+        clearDayTabHoverTimer();
+        clearDayTabDragHighlight();
+      }
+    });
+    dayTabsDragBound = true;
+  }
+
   // auto-load first day
   if (days.length) {
     loadDay(days[0].id);
   }
+}
+
+function activateDayTab(dayId) {
+  document.querySelectorAll("#dayTabs .nav-link").forEach(b => {
+    b.classList.toggle("active", String(b.dataset.day) === String(dayId));
+  });
+}
+
+function clearDayTabHoverTimer() {
+  if (dayTabHoverTimer) {
+    clearTimeout(dayTabHoverTimer);
+    dayTabHoverTimer = null;
+  }
+  dayTabHoverDayId = null;
+}
+
+function clearDayTabDragHighlight() {
+  document.querySelectorAll("#dayTabs .nav-link.drag-over-tab").forEach(b => {
+    b.classList.remove("drag-over-tab");
+  });
+}
+
+function clearDragPayload() {
+  dragPayload = null;
+  clearDayTabHoverTimer();
+  clearDayTabDragHighlight();
+}
+
+function attachDayTabDragHandlers(btn) {
+  if (READ_ONLY) return;
+
+  btn.addEventListener("dragenter", (e) => {
+    if (!dragPayload?.assignParams) return;
+    e.preventDefault();
+    clearDayTabDragHighlight();
+    btn.classList.add("drag-over-tab");
+  });
+
+  btn.addEventListener("dragover", (e) => {
+    if (!dragPayload?.assignParams) return;
+    e.preventDefault();
+    const dayId = btn.dataset.day;
+    const activeBtn = document.querySelector("#dayTabs .nav-link.active");
+    if (activeBtn && String(activeBtn.dataset.day) === String(dayId)) return;
+    if (dayTabHoverDayId === dayId && dayTabHoverTimer) return;
+
+    clearDayTabHoverTimer();
+    dayTabHoverDayId = dayId;
+    dayTabHoverTimer = setTimeout(() => {
+      dayTabHoverTimer = null;
+      activateDayTab(dayId);
+      loadDay(parseInt(dayId, 10));
+    }, DAY_TAB_SWITCH_DELAY_MS);
+  });
+
+  btn.addEventListener("dragleave", () => {
+    btn.classList.remove("drag-over-tab");
+  });
 }
 
 function refreshCurrentDay() {
@@ -134,6 +241,39 @@ function showToast(message, type="info", delay=2500) {
   new bootstrap.Toast(toastEl, { delay }).show();
 }
 
+function filenameFromContentDisposition(headerVal) {
+  if (!headerVal || typeof headerVal !== "string") return null;
+  const utf8Match = headerVal.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (utf8Match) {
+    let raw = utf8Match[1].trim().replace(/^"(.*)"$/, "$1");
+    try {
+      return decodeURIComponent(raw);
+    } catch (e) {
+      return raw;
+    }
+  }
+  const quoted = headerVal.match(/filename="((?:\\.|[^"\\])*)"/i);
+  if (quoted) return quoted[1].replace(/\\"/g, '"');
+  const plain = headerVal.match(/filename=([^;\s]+)/i);
+  return plain ? plain[1].replace(/^"(.*)"$/, "$1") : null;
+}
+
+function setPlannerBusyVisible(visible, message) {
+  const overlay = document.getElementById("plannerBusyOverlay");
+  const msgEl = document.getElementById("plannerBusyMessage");
+  if (!overlay) return;
+  if (msgEl) {
+    if (visible) {
+      msgEl.textContent = message != null && message !== "" ? message : "Please wait…";
+    } else {
+      msgEl.textContent = "Please wait…";
+    }
+  }
+  overlay.classList.toggle("d-none", !visible);
+  overlay.setAttribute("aria-hidden", visible ? "false" : "true");
+  document.body.classList.toggle("planner-busy", visible);
+}
+
 function enableAutoScroll() {
   let scrollInterval=null;
   window.addEventListener("dragover", e=>{
@@ -151,10 +291,22 @@ function attachDrag(el, fromCell=false){
     el.classList.add("read-only-item");
     return;
   }
+  if (el.draggable === false) return;
   el.addEventListener("dragstart",()=>{
-    dragged=el; draggedFromCell=fromCell?el.dataset.layoutId:null; el.classList.add("opacity-50");
+    dragged=el;
+    draggedFromCell=fromCell?el.dataset.layoutId:null;
+    dragPayload = {
+      sourceLayoutId: draggedFromCell ? String(draggedFromCell) : null,
+      assignParams: captureAssignParams(el),
+    };
+    el.classList.add("opacity-50");
   });
-  el.addEventListener("dragend",()=>{el.classList.remove("opacity-50"); dragged=null; draggedFromCell=null;});
+  el.addEventListener("dragend",()=>{
+    el.classList.remove("opacity-50");
+    dragged=null;
+    draggedFromCell=null;
+    clearDragPayload();
+  });
 }
 
 function makeDraggableSession(cellLabel, s, layoutId) {
@@ -194,8 +346,9 @@ function makeDraggableSession(cellLabel, s, layoutId) {
   } else {
     div.dataset.id = s.id;
     div.dataset.sessionType = s.session_type_id;
-    div.innerHTML = `<strong>${cellLabel} (${s.code})</strong> - ${s.title}<br>${s.speaker_full || ""} - ${s.speaker_company || ""}${s.subject ? ` (${s.subject})` : ""}`;
+    div.innerHTML = `<strong>${cellLabel} (${s.code})</strong> - ${s.title}<br>${formatSpeakerDisplay(s)} - ${s.speaker_company || ""}${s.subject ? ` (${s.subject})` : ""}`;
     wrap.appendChild(div);
+    appendRegularSessionDecorations(wrap, s);
   }
   return wrap;
 }
@@ -350,11 +503,12 @@ async function loadDay(day=1){
     listContainer.addEventListener("dragover", e => e.preventDefault());
     listContainer.addEventListener("drop", async e => {
       e.preventDefault();
-      if (draggedFromCell) {
+      const sourceLayoutId = dragPayload?.sourceLayoutId ?? draggedFromCell;
+      if (sourceLayoutId) {
         const res = await fetch("/planner/api/unassign/", {
           method: "POST",
           headers: { "X-CSRFToken": CSRF_TOKEN },
-          body: JSON.stringify({ layout_id: draggedFromCell, transaction_id: newTransactionId() })
+          body: JSON.stringify({ layout_id: sourceLayoutId, transaction_id: newTransactionId() })
         });
         const d = await res.json();
         appendLogs(d.logs);
@@ -393,11 +547,12 @@ async function handleDrop(e, l, day) {
   if (READ_ONLY) return;
   const cell = e.target.closest ? e.target.closest(".cell") : e.currentTarget;
   if (cell) cell.classList.remove("drag-over");
-  if (!dragged) return;
-  // Capture once – dragend can clear dragged before any await
-  const sourceLayoutId = draggedFromCell ? String(draggedFromCell) : null;
-  const assignParams = captureAssignParams(dragged);
+
+  const assignParams = dragPayload?.assignParams ?? captureAssignParams(dragged);
   if (!assignParams) return;
+
+  const sourceLayoutId = dragPayload?.sourceLayoutId
+    ?? (draggedFromCell ? String(draggedFromCell) : null);
 
   const targetLayoutId = String(l.id);
   if (sourceLayoutId === targetLayoutId) return;
@@ -596,16 +751,25 @@ async function loadLogHistoryback(){
   logDiv.scrollTop = logDiv.scrollHeight;
 }
 
+function sessionStatusIsPending(status) {
+  const t = String(status == null ? "" : status).trim().toLowerCase();
+  return t === "" || t === "pending";
+}
+
 function initAllSessions() {
   allSessions = [];
   document.querySelectorAll("#itemList .item").forEach(el => {
     const topicIdsStr = (el.dataset.topicIds || "").trim();
     const topicIds = topicIdsStr ? topicIdsStr.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) : [];
+    const st = (el.dataset.sessionText || "").trim();
+    const statusRaw = (el.dataset.status || "").trim();
     allSessions.push({
       id: parseInt(el.dataset.id, 10),
       type: el.dataset.type,
       typeId: el.dataset.typeId != null ? parseInt(el.dataset.typeId, 10) : null,
       subjectId: el.dataset.subjectId != null && el.dataset.subjectId !== "" ? parseInt(el.dataset.subjectId, 10) : null,
+      sessionText: st !== "" ? st : null,
+      status: statusRaw || "Pending",
       topicIds,
       html: el.outerHTML
     });
@@ -632,15 +796,24 @@ function passesSessionFilter(s) {
   if (filterMode === "AND") {
     const hasType = selectedTypeIds.length === 0 || (s.typeId != null && selectedTypeIds.includes(s.typeId));
     const hasSubject = selectedSubjectIds.length === 0 || (s.subjectId != null && selectedSubjectIds.includes(s.subjectId));
+    const hasSessionText =
+      selectedSessionTexts.length === 0 ||
+      (s.sessionText != null && selectedSessionTexts.includes(s.sessionText));
     const hasTopic = selectedTopicIds.length === 0 || (s.topicIds && s.topicIds.some((tid) => selectedTopicIds.includes(tid)));
-    return hasType && hasSubject && hasTopic;
+    return hasType && hasSubject && hasSessionText && hasTopic;
   }
   // OR: only dimensions with at least one selection count; session passes if it matches any of those
   const anyType = selectedTypeIds.length > 0 && s.typeId != null && selectedTypeIds.includes(s.typeId);
   const anySubject = selectedSubjectIds.length > 0 && s.subjectId != null && selectedSubjectIds.includes(s.subjectId);
+  const anySessionText =
+    selectedSessionTexts.length > 0 && s.sessionText != null && selectedSessionTexts.includes(s.sessionText);
   const anyTopic = selectedTopicIds.length > 0 && s.topicIds && s.topicIds.some((tid) => selectedTopicIds.includes(tid));
-  const hasAnySelection = selectedTypeIds.length > 0 || selectedSubjectIds.length > 0 || selectedTopicIds.length > 0;
-  return !hasAnySelection || anyType || anySubject || anyTopic;
+  const hasAnySelection =
+    selectedTypeIds.length > 0 ||
+    selectedSubjectIds.length > 0 ||
+    selectedSessionTexts.length > 0 ||
+    selectedTopicIds.length > 0;
+  return !hasAnySelection || anyType || anySubject || anySessionText || anyTopic;
 }
 
 function getFilteredSessions() {
@@ -651,8 +824,9 @@ function updateSessionFilterResults() {
   const el = document.getElementById("sessionFilterResults");
   if (!el) return;
   const usedSet = new Set(currentUsedSessions);
-  const totalAvailable = allSessions.filter((s) => !usedSet.has(s.id)).length;
-  const filtered = getFilteredSessions();
+  const pending = (s) => sessionStatusIsPending(s.status);
+  const totalAvailable = allSessions.filter((s) => pending(s) && !usedSet.has(s.id)).length;
+  const filtered = getFilteredSessions().filter(pending);
   const matchingAvailable = filtered.filter((s) => !usedSet.has(s.id)).length;
   el.textContent = `Results: ${matchingAvailable} / ${totalAvailable}`;
   updateSessionFilterBtnActive();
@@ -662,7 +836,11 @@ function updateSessionFilterBtnActive() {
   const filterBtn = document.getElementById("sessionFilterBtn");
   if (!filterBtn) return;
   const icon = filterBtn.querySelector(".bi");
-  const active = selectedTypeIds.length > 0 || selectedSubjectIds.length > 0 || selectedTopicIds.length > 0;
+  const active =
+    selectedTypeIds.length > 0 ||
+    selectedSubjectIds.length > 0 ||
+    selectedSessionTexts.length > 0 ||
+    selectedTopicIds.length > 0;
   filterBtn.classList.toggle("text-primary", active);
   filterBtn.classList.toggle("text-secondary", !active);
   if (icon) {
@@ -718,6 +896,7 @@ async function buildSessionTabs() {
   addTab("All", "all", true);
   types.forEach(t => addTab(t.name, t.name));
   addTab("Special", "special");
+  addTab("Declined", "declined");
 
   setupSessionFilterUI(types);
 }
@@ -727,6 +906,7 @@ function setupSessionFilterUI(types) {
   const filterPanel = document.getElementById("sessionFilterPanel");
   const filterType = document.getElementById("filterType");
   const filterSubject = document.getElementById("filterSubject");
+  const filterSessionText = document.getElementById("filterSessionText");
   const filterTopic = document.getElementById("filterTopic");
   const filterClear = document.getElementById("sessionFilterClear");
   const modeAll = document.getElementById("filterModeAll");
@@ -736,8 +916,11 @@ function setupSessionFilterUI(types) {
 
   const topics = getJsonFromPage("filter-topics-data") || [];
   const subjects = getJsonFromPage("filter-subjects-data") || [];
+  const sessionTexts = getJsonFromPage("filter-session-type-strings-data") || [];
 
-  [filterType, filterSubject, filterTopic].forEach((sel) => { if (sel) sel.innerHTML = ""; });
+  [filterType, filterSubject, filterSessionText, filterTopic].forEach((sel) => {
+    if (sel) sel.innerHTML = "";
+  });
   (Array.isArray(types) ? types : []).forEach((t) => {
     const opt = document.createElement("option");
     opt.value = t.id;
@@ -749,6 +932,12 @@ function setupSessionFilterUI(types) {
     opt.value = s.subject_id;
     opt.textContent = s.subject_code || s.subject_desc || String(s.subject_id);
     if (filterSubject) filterSubject.appendChild(opt);
+  });
+  (Array.isArray(sessionTexts) ? sessionTexts : []).forEach((txt) => {
+    const opt = document.createElement("option");
+    opt.value = txt;
+    opt.textContent = txt;
+    if (filterSessionText) filterSessionText.appendChild(opt);
   });
   (Array.isArray(topics) ? topics : []).forEach((t) => {
     const opt = document.createElement("option");
@@ -771,13 +960,14 @@ function setupSessionFilterUI(types) {
 
   if (filterClear) {
     filterClear.addEventListener("click", () => {
-      [filterType, filterSubject, filterTopic].forEach((sel) => {
+      [filterType, filterSubject, filterSessionText, filterTopic].forEach((sel) => {
         if (sel) Array.from(sel.options).forEach((o) => o.selected = false);
       });
       if (modeAll) modeAll.checked = true;
       filterMode = "AND";
       selectedTypeIds = [];
       selectedSubjectIds = [];
+      selectedSessionTexts = [];
       selectedTopicIds = [];
       updateSessionFilterBtnActive();
       renderSessionList();
@@ -787,11 +977,14 @@ function setupSessionFilterUI(types) {
   function syncFilterState() {
     selectedTypeIds = filterType ? Array.from(filterType.selectedOptions).map((o) => parseInt(o.value, 10)) : [];
     selectedSubjectIds = filterSubject ? Array.from(filterSubject.selectedOptions).map((o) => parseInt(o.value, 10)) : [];
+    selectedSessionTexts = filterSessionText
+      ? Array.from(filterSessionText.selectedOptions).map((o) => o.value)
+      : [];
     selectedTopicIds = filterTopic ? Array.from(filterTopic.selectedOptions).map((o) => parseInt(o.value, 10)) : [];
     filterMode = modeAny && modeAny.checked ? "OR" : "AND";
   }
 
-  [filterType, filterSubject, filterTopic].forEach((el) => {
+  [filterType, filterSubject, filterSessionText, filterTopic].forEach((el) => {
     if (el) el.addEventListener("change", () => { syncFilterState(); renderSessionList(); });
   });
   if (modeAll) modeAll.addEventListener("change", () => { syncFilterState(); renderSessionList(); });
@@ -811,9 +1004,16 @@ function renderSessionList() {
   const list = document.getElementById("itemList");
   list.innerHTML = "";
 
-  const toShow = activeSessionType === "all"
-    ? getFilteredSessions()
-    : allSessions.filter((s) => s.type === activeSessionType);
+  let toShow;
+  if (activeSessionType === "declined") {
+    toShow = allSessions.filter((s) => !sessionStatusIsPending(s.status));
+  } else if (activeSessionType === "all") {
+    toShow = getFilteredSessions().filter((s) => sessionStatusIsPending(s.status));
+  } else {
+    toShow = allSessions.filter(
+      (s) => s.type === activeSessionType && sessionStatusIsPending(s.status)
+    );
+  }
 
   toShow.forEach((s) => list.insertAdjacentHTML("beforeend", s.html));
 
@@ -861,6 +1061,20 @@ async function saveSessionDetails() {
 
 
 document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    var msg = sessionStorage.getItem("importMessage");
+    var nullCount = parseInt(sessionStorage.getItem("importNullCount") || "0", 10);
+    sessionStorage.removeItem("importMessage");
+    sessionStorage.removeItem("importNullCount");
+    if (msg) {
+      if (nullCount > 0) {
+        showToast(msg + " " + nullCount + " session(s) have no session type (null). Please review.", "warning", 4500);
+      } else {
+        showToast(msg, "success", 3000);
+      }
+    }
+  } catch (e) {}
+
   enableAutoScroll();
 
   if (READ_ONLY) {
@@ -1046,4 +1260,240 @@ document.addEventListener("DOMContentLoaded", async () => {
       loadLogHistory();
     } else showToast("Nothing to undo","danger");
   });
+
+  // CSV Import (Sessionboard) modal: open icon -> file selection -> preview stats + sample
+  const openIcon = document.querySelector(".open-icon");
+  const csvImportModalEl = document.getElementById("csvImportModal");
+  const csvImportFile = document.getElementById("csvImportFile");
+  const csvImportStep1 = document.getElementById("csvImportStep1");
+  const csvImportStep2 = document.getElementById("csvImportStep2");
+  const csvImportStep1Error = document.getElementById("csvImportStep1Error");
+  const csvImportRowCount = document.getElementById("csvImportRowCount");
+  const csvImportColCount = document.getElementById("csvImportColCount");
+  const csvImportThead = document.getElementById("csvImportThead");
+  const csvImportTbody = document.getElementById("csvImportTbody");
+  const csvImportChooseAnother = document.getElementById("csvImportChooseAnother");
+  const csvImportRunBtn = document.getElementById("csvImportRunBtn");
+  const csvImportStep2Error = document.getElementById("csvImportStep2Error");
+
+  if (openIcon && csvImportModalEl) {
+    openIcon.style.cursor = "pointer";
+    openIcon.setAttribute("title", "Import from SessionBoard");
+    openIcon.addEventListener("click", () => {
+      csvImportStep1.style.display = "block";
+      csvImportStep2.style.display = "none";
+      csvImportStep1Error.style.display = "none";
+      csvImportStep1Error.textContent = "";
+      csvImportFile.value = "";
+      new bootstrap.Modal(csvImportModalEl).show();
+    });
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s == null ? "" : String(s);
+    return div.innerHTML;
+  }
+  function escapeHtmlAttr(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/\r?\n/g, " ");
+  }
+  function truncateCell(s, maxLen) {
+    const str = s == null ? "" : String(s);
+    if (str.length <= maxLen) return str;
+    return str.slice(0, maxLen) + "\u2026";
+  }
+  const CSV_PREVIEW_CELL_MAX_LEN = 50;
+
+  if (csvImportFile) {
+    csvImportFile.addEventListener("change", async () => {
+      const file = csvImportFile.files && csvImportFile.files[0];
+      csvImportStep1Error.style.display = "none";
+      csvImportStep1Error.textContent = "";
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        csvImportStep1Error.textContent = "Please select a .csv file.";
+        csvImportStep1Error.style.display = "block";
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      setPlannerBusyVisible(true, "Loading preview…");
+      try {
+        const res = await fetch(CSV_PREVIEW_URL, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": CSRF_TOKEN },
+          body: formData,
+        });
+        const text = await res.text();
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (parseErr) {
+          csvImportStep1Error.textContent =
+            `Server error (HTTP ${res.status}). Response was not JSON — check server logs.`;
+          csvImportStep1Error.style.display = "block";
+          return;
+        }
+        if (!res.ok) {
+          csvImportStep1Error.textContent = data.error || "Preview failed.";
+          csvImportStep1Error.style.display = "block";
+          return;
+        }
+        csvImportRowCount.textContent = data.row_count ?? 0;
+        csvImportColCount.textContent = data.col_count ?? 0;
+        const headers = data.headers || [];
+        const rows = data.rows || [];
+        const colCount = headers.length;
+        csvImportThead.innerHTML = headers.map(h => `<th scope="col" title="${escapeHtmlAttr(h)}">${escapeHtml(truncateCell(h, CSV_PREVIEW_CELL_MAX_LEN))}</th>`).join("");
+        csvImportTbody.innerHTML = rows.map(row => {
+          const arr = Array.isArray(row) ? row : [];
+          const cells = [];
+          for (let c = 0; c < colCount; c++) {
+            const raw = arr[c] ?? "";
+            const truncated = truncateCell(raw, CSV_PREVIEW_CELL_MAX_LEN);
+            cells.push(`<td title="${escapeHtmlAttr(raw)}">${escapeHtml(truncated)}</td>`);
+          }
+          return "<tr>" + cells.join("") + "</tr>";
+        }).join("");
+        const tableEl = csvImportThead?.closest("table");
+        if (tableEl) tableEl.style.width = Math.max(colCount * 130, 800) + "px";
+        csvImportStep1.style.display = "none";
+        csvImportStep2.style.display = "block";
+      } catch (err) {
+        csvImportStep1Error.textContent =
+          "Network error: " +
+          (err.message || "Could not reach server.") +
+          " (Check that the app is running, URL is correct, and browser is not blocking the request.)";
+        csvImportStep1Error.style.display = "block";
+      } finally {
+        setPlannerBusyVisible(false);
+      }
+    });
+  }
+
+  if (csvImportChooseAnother) {
+    csvImportChooseAnother.addEventListener("click", () => {
+      csvImportStep2.style.display = "none";
+      csvImportStep1.style.display = "block";
+      csvImportStep1Error.style.display = "none";
+      csvImportFile.value = "";
+    });
+  }
+
+  if (csvImportRunBtn && csvImportFile) {
+    csvImportRunBtn.addEventListener("click", async () => {
+      const file = csvImportFile.files && csvImportFile.files[0];
+      if (csvImportStep2Error) {
+        csvImportStep2Error.style.display = "none";
+        csvImportStep2Error.textContent = "";
+      }
+      if (!file || !file.name.toLowerCase().endsWith(".csv")) {
+        if (csvImportStep2Error) {
+          csvImportStep2Error.textContent = "Please choose a CSV file first.";
+          csvImportStep2Error.style.display = "block";
+        }
+        return;
+      }
+      csvImportRunBtn.disabled = true;
+      setPlannerBusyVisible(true, "Importing…");
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch(CSV_IMPORT_URL, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": CSRF_TOKEN },
+          body: formData,
+        });
+        const text = await res.text();
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (parseErr) {
+          setPlannerBusyVisible(false);
+          if (csvImportStep2Error) {
+            csvImportStep2Error.textContent =
+              `Server error (HTTP ${res.status}). Response was not JSON — check server logs.`;
+            csvImportStep2Error.style.display = "block";
+          }
+          csvImportRunBtn.disabled = false;
+          return;
+        }
+        if (!res.ok) {
+          setPlannerBusyVisible(false);
+          if (csvImportStep2Error) {
+            csvImportStep2Error.textContent = data.error || "Import failed.";
+            csvImportStep2Error.style.display = "block";
+          }
+          csvImportRunBtn.disabled = false;
+          return;
+        }
+        bootstrap.Modal.getInstance(csvImportModalEl)?.hide();
+        csvImportStep2.style.display = "none";
+        csvImportStep1.style.display = "block";
+        csvImportFile.value = "";
+        try {
+          sessionStorage.setItem("importMessage", data.message || "Import completed.");
+          sessionStorage.setItem("importNullCount", String(data.session_type_null_count || 0));
+        } catch (e) {}
+        window.location.reload();
+        return;
+      } catch (err) {
+        setPlannerBusyVisible(false);
+        if (csvImportStep2Error) {
+          csvImportStep2Error.textContent =
+            "Network error: " +
+            (err.message || "Could not reach server.") +
+            " (Check server/proxy timeout for large imports.)";
+          csvImportStep2Error.style.display = "block";
+        }
+      }
+      csvImportRunBtn.disabled = false;
+    });
+  }
+
+  const exportLink = document.querySelector(".export-link");
+  if (exportLink) {
+    exportLink.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const url = exportLink.getAttribute("href") || EXPORT_EXCEL_URL;
+      setPlannerBusyVisible(true, "Building Excel…");
+      try {
+        const res = await fetch(url, { method: "GET", credentials: "same-origin" });
+        if (!res.ok) {
+          const errText = await res.text();
+          let detail = `Export failed (HTTP ${res.status}).`;
+          try {
+            const j = JSON.parse(errText);
+            if (j.detail || j.error) detail = String(j.detail || j.error);
+          } catch (x) {
+            if (errText && errText.length < 240 && errText.indexOf("<") === -1) detail = errText;
+          }
+          showToast(detail, "danger", 4500);
+          return;
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get("Content-Disposition");
+        const name = filenameFromContentDisposition(cd) || "grid-export.xlsx";
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objUrl;
+        a.download = name;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objUrl);
+      } catch (err) {
+        showToast("Network error: " + (err.message || "Could not export."), "danger", 4500);
+      } finally {
+        setPlannerBusyVisible(false);
+      }
+    });
+  }
 });
