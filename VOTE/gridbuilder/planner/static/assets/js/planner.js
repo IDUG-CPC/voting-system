@@ -1313,7 +1313,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       csvImportStep1Error.textContent = "";
       csvImportFile.value = "";
       csvPreviewStats = null;
-      if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+      if (csvImportReplaceAll) csvImportReplaceAll.checked = false;
       if (csvImportStats) csvImportStats.textContent = "";
       new bootstrap.Modal(csvImportModalEl).show();
     });
@@ -1387,7 +1387,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           existing_count: data.existing_count ?? 0,
           dummy_count: data.dummy_count ?? 0,
         };
-        if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+        if (csvImportReplaceAll) csvImportReplaceAll.checked = false;
         updateCsvImportStats();
         const headers = data.headers || [];
         const rows = data.rows || [];
@@ -1426,7 +1426,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       csvImportStep1Error.style.display = "none";
       csvImportFile.value = "";
       csvPreviewStats = null;
-      if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+      if (csvImportReplaceAll) csvImportReplaceAll.checked = false;
       if (csvImportStats) csvImportStats.textContent = "";
     });
   }

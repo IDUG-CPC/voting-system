@@ -231,8 +231,8 @@ def _import_stats(headers, data_rows, event_code):
 
 
 def _replace_all_from_request(request):
-    """POST replace_all: default True (replace-all) when absent."""
-    return request.POST.get("replace_all", "1") in ("1", "true", "True", "on")
+    """POST replace_all: default False (merge) when absent."""
+    return request.POST.get("replace_all", "0") in ("1", "true", "True", "on")
 
 
 @ensure_csrf_cookie
