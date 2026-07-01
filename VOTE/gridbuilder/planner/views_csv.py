@@ -1,6 +1,7 @@
 """
 CSV import from Sessionboard: file selection, preview (stats + sample), and full import.
-Import: DELETE rows for event (actionlog, calendarslot, session_topic, session), then INSERT sessions + session_topic from CSV.
+Replace-all: DELETE rows for event (actionlog, calendarslot, session_topic, session), then INSERT all sessions from CSV.
+Merge: skip existing session_code values; insert only new sessions (preserves grid assignments and logs).
 """
 import csv
 import io
@@ -123,19 +124,28 @@ def csv_preview(request):
             "col_count": 0,
             "headers": [],
             "rows": [],
+            "current_session_count": 0,
+            "new_count": 0,
+            "existing_count": 0,
+            "dummy_count": 0,
         })
 
     headers = rows[0]
     data_rows = rows[1:]
-    row_count = len(data_rows)
     col_count = len(headers)
     sample_rows = data_rows[:3]
+    event_code = _event_code_from_request(request)
+    stats = _import_stats(headers, data_rows, event_code)
 
     return JsonResponse({
-        "row_count": row_count,
+        "row_count": stats["row_count"],
         "col_count": col_count,
         "headers": headers,
         "rows": sample_rows,
+        "current_session_count": stats["current_session_count"],
+        "new_count": stats["new_count"],
+        "existing_count": stats["existing_count"],
+        "dummy_count": stats["dummy_count"],
     })
 
 
@@ -167,12 +177,71 @@ def _row_get(row, col_index, header, default=""):
     return val.strip() if val is not None and isinstance(val, str) else default
 
 
+def _is_dummy_session_title(title):
+    """Sessionboard placeholder rows (title starts with 'dummy session', case-insensitive)."""
+    return bool(title) and title.strip().lower().startswith("dummy session")
+
+
+def _dummy_sessions_suffix(count):
+    if count <= 0:
+        return ""
+    noun = "session" if count == 1 else "sessions"
+    return f" {count} dummy {noun} ignored."
+
+
+def _import_stats(headers, data_rows, event_code):
+    """Counts for preview UI and merge-mode import (duplicate Friendly IDs in CSV count as skipped)."""
+    col_index = {h.strip(): i for i, h in enumerate(headers)}
+
+    def get(row, header, default=""):
+        return _row_get(row, col_index, header, default)
+
+    existing_codes = set(
+        Session.objects.filter(event_code=event_code).values_list("session_code", flat=True)
+    )
+    seen_in_csv = set()
+    new_count = 0
+    skipped_count = 0
+    dummy_count = 0
+
+    for row in data_rows:
+        session_code = get(row, "Friendly ID", "").strip()
+        if not session_code:
+            continue
+        title = get(row, "Title", "").strip()
+        if title and _is_dummy_session_title(title):
+            dummy_count += 1
+            continue
+        if session_code in seen_in_csv:
+            skipped_count += 1
+            continue
+        seen_in_csv.add(session_code)
+        if session_code in existing_codes:
+            skipped_count += 1
+        else:
+            new_count += 1
+
+    return {
+        "row_count": len(data_rows),
+        "current_session_count": len(existing_codes),
+        "new_count": new_count,
+        "existing_count": skipped_count,
+        "dummy_count": dummy_count,
+    }
+
+
+def _replace_all_from_request(request):
+    """POST replace_all: default True (replace-all) when absent."""
+    return request.POST.get("replace_all", "1") in ("1", "true", "True", "on")
+
+
 @ensure_csrf_cookie
 @require_http_methods(["POST"])
 def csv_import(request):
     """
-    Accept an uploaded CSV file; DELETE event data (actionlog, calendarslot, session_topic, session),
-    then INSERT sessions and session_topic from CSV. event_code from session (login group).
+    Accept an uploaded CSV file and INSERT sessions + session_topic from CSV.
+    replace_all (default true): DELETE event data first, then insert all rows.
+    replace_all false: merge only — skip existing session_code values and duplicate Friendly IDs in CSV.
     """
     file_obj = request.FILES.get("file")
     if not file_obj:
@@ -191,6 +260,8 @@ def csv_import(request):
     if not event_code:
         return JsonResponse({"error": "Event (EMEA/NA) not set for this user."}, status=400)
 
+    replace_all = _replace_all_from_request(request)
+
     # Build header -> column index (strip headers for matching)
     col_index = {h.strip(): i for i, h in enumerate(headers)}
 
@@ -199,29 +270,29 @@ def csv_import(request):
 
     schema = _db_schema()
     with transaction.atomic():
-        with connection.cursor() as cursor:
-            # 1) DELETE actionlog for this event (use schema so we hit same DB as ORM)
-            cursor.execute(
-                f'DELETE FROM "{schema}".planner_actionlog WHERE event_code = %s',
-                [event_code],
-            )
-            # 2) DELETE calendarslot for this event
-            cursor.execute(
-                f'DELETE FROM "{schema}".planner_calendarslot WHERE event_code = %s',
-                [event_code],
-            )
-            # 3) DELETE session_topic for sessions of this event
-            cursor.execute(
-                f'DELETE FROM "{schema}".planner_session_topic WHERE session_id IN (SELECT id FROM "{schema}".planner_session WHERE event_code = %s)',
-                [event_code],
-            )
-            # 4) DELETE sessions for this event
-            cursor.execute(
-                f'DELETE FROM "{schema}".planner_session WHERE event_code = %s',
-                [event_code],
-            )
+        if replace_all:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'DELETE FROM "{schema}".planner_actionlog WHERE event_code = %s',
+                    [event_code],
+                )
+                cursor.execute(
+                    f'DELETE FROM "{schema}".planner_calendarslot WHERE event_code = %s',
+                    [event_code],
+                )
+                cursor.execute(
+                    f'DELETE FROM "{schema}".planner_session_topic WHERE session_id IN (SELECT id FROM "{schema}".planner_session WHERE event_code = %s)',
+                    [event_code],
+                )
+                cursor.execute(
+                    f'DELETE FROM "{schema}".planner_session WHERE event_code = %s',
+                    [event_code],
+                )
 
         inserted = 0
+        skipped = 0
+        dummy_ignored = 0
+        seen_in_csv = set()
         company_mappings = _load_planner_company_mappings(event_code)
         for row in data_rows:
             session_code_val = get(row, "Friendly ID", "").strip()
@@ -230,6 +301,20 @@ def csv_import(request):
             title_val = get(row, "Title", "").strip()
             if not title_val:
                 continue
+            if _is_dummy_session_title(title_val):
+                dummy_ignored += 1
+                continue
+
+            if not replace_all:
+                if session_code_val in seen_in_csv:
+                    skipped += 1
+                    continue
+                seen_in_csv.add(session_code_val)
+                if Session.objects.filter(
+                    event_code=event_code, session_code=session_code_val
+                ).exists():
+                    skipped += 1
+                    continue
 
             # subject_id: lookup planner_subject by subject_code + event_code
             subject_raw = get(row, CSV_COL_SUBJECT, "").strip()
@@ -286,4 +371,9 @@ def csv_import(request):
                     SessionTopic.objects.create(session=new_session, topic=topic)
             inserted += 1
 
-    return JsonResponse({"message": f"Import completed. {inserted} sessions imported."})
+    dummy_suffix = _dummy_sessions_suffix(dummy_ignored)
+    if replace_all:
+        message = f"Import completed. {inserted} sessions imported.{dummy_suffix}"
+    else:
+        message = f"Import completed. {inserted} new sessions added, {skipped} skipped.{dummy_suffix}"
+    return JsonResponse({"message": message})

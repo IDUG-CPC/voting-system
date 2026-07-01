@@ -751,9 +751,12 @@ async function loadLogHistoryback(){
   logDiv.scrollTop = logDiv.scrollHeight;
 }
 
-function sessionStatusIsPending(status) {
-  const t = String(status == null ? "" : status).trim().toLowerCase();
-  return t === "" || t === "pending";
+function sessionStatusIsDeclined(status) {
+  return String(status == null ? "" : status).trim().toLowerCase() === "declined";
+}
+
+function sessionStatusIsSchedulable(status) {
+  return !sessionStatusIsDeclined(status);
 }
 
 function initAllSessions() {
@@ -824,9 +827,9 @@ function updateSessionFilterResults() {
   const el = document.getElementById("sessionFilterResults");
   if (!el) return;
   const usedSet = new Set(currentUsedSessions);
-  const pending = (s) => sessionStatusIsPending(s.status);
-  const totalAvailable = allSessions.filter((s) => pending(s) && !usedSet.has(s.id)).length;
-  const filtered = getFilteredSessions().filter(pending);
+  const schedulable = (s) => sessionStatusIsSchedulable(s.status);
+  const totalAvailable = allSessions.filter((s) => schedulable(s) && !usedSet.has(s.id)).length;
+  const filtered = getFilteredSessions().filter(schedulable);
   const matchingAvailable = filtered.filter((s) => !usedSet.has(s.id)).length;
   el.textContent = `Results: ${matchingAvailable} / ${totalAvailable}`;
   updateSessionFilterBtnActive();
@@ -1006,18 +1009,21 @@ function renderSessionList() {
 
   let toShow;
   if (activeSessionType === "declined") {
-    toShow = allSessions.filter((s) => !sessionStatusIsPending(s.status));
+    toShow = allSessions.filter((s) => sessionStatusIsDeclined(s.status));
   } else if (activeSessionType === "all") {
-    toShow = getFilteredSessions().filter((s) => sessionStatusIsPending(s.status));
+    toShow = getFilteredSessions().filter((s) => sessionStatusIsSchedulable(s.status));
   } else {
     toShow = allSessions.filter(
-      (s) => s.type === activeSessionType && sessionStatusIsPending(s.status)
+      (s) => s.type === activeSessionType && sessionStatusIsSchedulable(s.status)
     );
   }
 
   toShow.forEach((s) => list.insertAdjacentHTML("beforeend", s.html));
 
-  document.querySelectorAll("#itemList .item").forEach(el => attachDrag(el));
+  document.querySelectorAll("#itemList .item").forEach(el => {
+    el.draggable = !sessionStatusIsDeclined(el.dataset.status);
+    attachDrag(el);
+  });
   document.querySelectorAll("#specialList .item").forEach(el => attachDrag(el));
   renderAvailability(currentUsedSessions);
 
@@ -1275,6 +1281,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   const csvImportChooseAnother = document.getElementById("csvImportChooseAnother");
   const csvImportRunBtn = document.getElementById("csvImportRunBtn");
   const csvImportStep2Error = document.getElementById("csvImportStep2Error");
+  const csvImportReplaceAll = document.getElementById("csvImportReplaceAll");
+  const csvImportStats = document.getElementById("csvImportStats");
+  let csvPreviewStats = null;
+
+  function updateCsvImportStats() {
+    if (!csvImportStats || !csvPreviewStats) return;
+    const y = csvPreviewStats.row_count;
+    const x = csvPreviewStats.current_session_count;
+    const a = csvPreviewStats.new_count;
+    const b = csvPreviewStats.existing_count;
+    const d = csvPreviewStats.dummy_count;
+    const dummyNote = d > 0 ? ` · ${d} dummy ignored` : "";
+    if (csvImportReplaceAll?.checked) {
+      csvImportStats.textContent =
+        `Replace all: Will replace all ${x} existing sessions with ${y} rows from file${dummyNote}`;
+    } else {
+      csvImportStats.textContent =
+        `Merge: Will add ${a} new · skip ${b} already existing${dummyNote} · ${y} rows in file`;
+    }
+  }
 
   if (openIcon && csvImportModalEl) {
     openIcon.style.cursor = "pointer";
@@ -1285,8 +1311,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       csvImportStep1Error.style.display = "none";
       csvImportStep1Error.textContent = "";
       csvImportFile.value = "";
+      csvPreviewStats = null;
+      if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+      if (csvImportStats) csvImportStats.textContent = "";
       new bootstrap.Modal(csvImportModalEl).show();
     });
+  }
+
+  if (csvImportReplaceAll) {
+    csvImportReplaceAll.addEventListener("change", updateCsvImportStats);
   }
 
   function escapeHtml(s) {
@@ -1346,6 +1379,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         csvImportRowCount.textContent = data.row_count ?? 0;
         csvImportColCount.textContent = data.col_count ?? 0;
+        csvPreviewStats = {
+          row_count: data.row_count ?? 0,
+          current_session_count: data.current_session_count ?? 0,
+          new_count: data.new_count ?? 0,
+          existing_count: data.existing_count ?? 0,
+          dummy_count: data.dummy_count ?? 0,
+        };
+        if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+        updateCsvImportStats();
         const headers = data.headers || [];
         const rows = data.rows || [];
         const colCount = headers.length;
@@ -1382,6 +1424,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       csvImportStep1.style.display = "block";
       csvImportStep1Error.style.display = "none";
       csvImportFile.value = "";
+      csvPreviewStats = null;
+      if (csvImportReplaceAll) csvImportReplaceAll.checked = true;
+      if (csvImportStats) csvImportStats.textContent = "";
     });
   }
 
@@ -1403,6 +1448,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       setPlannerBusyVisible(true, "Importing…");
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("replace_all", csvImportReplaceAll?.checked ? "1" : "0");
       try {
         const res = await fetch(CSV_IMPORT_URL, {
           method: "POST",

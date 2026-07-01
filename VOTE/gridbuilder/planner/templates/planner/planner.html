@@ -119,7 +119,7 @@
           <div id="itemList" class="scrollable-list">
             {% for s in sessions %}
               <div class="item"
-                   draggable="{% if s.status|default:'Pending'|lower == 'pending' %}true{% else %}false{% endif %}"
+                   draggable="{% if s.status|default:'Pending'|lower != 'declined' %}true{% else %}false{% endif %}"
                    data-id="{{ s.id }}"
                    data-type="{{ s.session_type.name|default:'' }}"
                    data-type-id="{{ s.session_type_id|default:'' }}"
@@ -241,6 +241,11 @@
         <!-- Step 2: title / 1 line stats / 1 line label / scrollable table block / choose another file -->
         <div id="csvImportStep2" class="csv-import-step2" style="display: none;">
           <p class="mb-1"><span class="badge bg-secondary">Rows: <span id="csvImportRowCount">0</span></span> <span class="badge bg-secondary">Columns: <span id="csvImportColCount">0</span></span></p>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="csvImportReplaceAll" checked>
+            <label class="form-check-label" for="csvImportReplaceAll">Replace all existing sessions</label>
+          </div>
+          <p id="csvImportStats" class="small mb-2 text-muted" aria-live="polite"></p>
           <p class="small text-muted mb-2">Sample (first 3 rows)</p>
           <div class="csv-preview-scroll border rounded p-2 bg-light">
             <div class="csv-preview-scroll-inner">
