@@ -1294,7 +1294,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const d = csvPreviewStats.dummy_count;
     const dummyNote = d > 0 ? ` · ${d} dummy ignored` : "";
     if (csvImportReplaceAll?.checked) {
-      csvImportStats.textContent =
+      csvImportStats.innerHTML =
+        `<i class="bi bi-exclamation-triangle-fill text-warning me-1" aria-hidden="true"></i>` +
         `Replace all: Will replace all ${x} existing sessions with ${y} rows from file${dummyNote}`;
     } else {
       csvImportStats.textContent =

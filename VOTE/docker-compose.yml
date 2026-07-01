@@ -14,7 +14,7 @@ services:
     command: gunicorn moderator_app.wsgi:application --bind 0.0.0.0:9100 --workers 3
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.webmoderator.rule=Host(\"moderator.idugemea.eu\")"
+      - "traefik.http.routers.webmoderator.rule=Host(\"moderator-test.idugemea.eu\")"
       - "traefik.http.routers.webmoderator.entrypoints=websecure"
       - "traefik.http.routers.webmoderator.tls.certresolver=letsencrypt"
       - "traefik.http.services.webmoderator.loadbalancer.server.port=9100"
@@ -32,7 +32,7 @@ services:
     command: gunicorn vote_app.wsgi:application --bind 0.0.0.0:9000 --workers 3
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.webvote.rule=Host(\"vote.idugemea.eu\")"
+      - "traefik.http.routers.webvote.rule=Host(\"vote-test.idugemea.eu\")"
       - "traefik.http.routers.webvote.entrypoints=websecure"
       - "traefik.http.routers.webvote.tls.certresolver=letsencrypt"
       - "traefik.http.services.webvote.loadbalancer.server.port=9000"
@@ -47,10 +47,10 @@ services:
     restart: always
     expose:
       - "9200"
-    command: gunicorn gridbuilder.wsgi:application --bind 0.0.0.0:9200 --workers 3
+    command: sh -c "python3 manage.py collectstatic --noinput && gunicorn gridbuilder.wsgi:application --bind 0.0.0.0:9200 --workers 3"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.webgridbuilder.rule=Host(\"gridbuilder.idugemea.eu\")"
+      - "traefik.http.routers.webgridbuilder.rule=Host(\"gridbuilder-test.idugemea.eu\")"
       - "traefik.http.routers.webgridbuilder.entrypoints=websecure"
       - "traefik.http.routers.webgridbuilder.tls.certresolver=letsencrypt"
       - "traefik.http.services.webgridbuilder.loadbalancer.server.port=9200"
