@@ -69,6 +69,17 @@ class Moderator(models.Model):
         unique_together = (('session_event', 'session_code'),)
 
 
+class ModeratorThankyou(models.Model):
+    session_event = models.CharField(db_column='SESSION_EVENT', max_length=10)
+    moderator_email = models.CharField(db_column='MODERATOR_EMAIL', max_length=50)
+    thank_you_sent = models.BooleanField(db_column='THANK_YOU_SENT', default=False)
+    sent_at = models.DateTimeField(db_column='SENT_AT', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'MODERATOR_THANKYOU'
+        unique_together = (('session_event', 'moderator_email'),)
+
 
 class Moderators(models.Model):
     session_event = models.CharField(db_column='SESSION_EVENT', max_length=10, blank=True)  # Field name made lowercase.

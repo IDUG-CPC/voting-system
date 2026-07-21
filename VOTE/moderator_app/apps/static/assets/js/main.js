@@ -40,7 +40,6 @@ function refresh_moderator_table(resetPage = false) {
         window.history.replaceState({}, '', url);
     }
 
-    const unassigned = url.searchParams.get('unassigned') || '0';
     const currentSearch = $('#search').val() || '';
 
     $.ajax({
@@ -54,8 +53,7 @@ function refresh_moderator_table(resetPage = false) {
         },
         data: {
             url: url.toString(),
-            search: currentSearch,
-            unassigned: unassigned
+            search: currentSearch
         },
 
         success: function(data) {
@@ -134,7 +132,38 @@ function value_edit(session_id) {
 }
 
 
+function isCpcModerator(name) {
+    return (name || '').trim().toUpperCase() === 'CPC';
+}
+
+function validateModeratorFields(name, email) {
+    name = (name || '').trim();
+    email = (email || '').trim();
+    const hasName = !!name;
+    const hasEmail = !!email;
+
+    if (!hasName && !hasEmail) {
+        return null;
+    }
+    if (isCpcModerator(name) && hasName) {
+        return null;
+    }
+    if (hasName && hasEmail) {
+        return null;
+    }
+    return 'Moderator name and email must both be filled, or both left empty to remove.';
+}
+
+
 function save_edit_value(session_id) {
+    const name = ($('#moderator_name').val() || '').trim();
+    const email = ($('#moderator_email').val() || '').trim();
+    const validationError = validateModeratorFields(name, email);
+
+    if (validationError) {
+        alertify.error(validationError);
+        return;
+    }
 
     $.ajax({
         beforeSend: function(request) {
@@ -144,8 +173,8 @@ function save_edit_value(session_id) {
         type : "POST",
         data : {
             session_id : session_id,
-            moderator_name: $('#moderator_name').val(),
-            moderator_email: $('#moderator_email').val()
+            moderator_name: name,
+            moderator_email: email
 
         },
 

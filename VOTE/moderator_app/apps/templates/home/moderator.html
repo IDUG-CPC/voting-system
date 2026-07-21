@@ -36,9 +36,71 @@
   #results_moderators {
     min-height: 450px;
   }
+
+  /* Splash / login overlay (Grid Builder pattern) */
+  #moderator-wrapper.splash-blurred {
+    filter: blur(8px);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .splash-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 40, 80, 0.45);
+    backdrop-filter: blur(4px);
+  }
+
+  .splash-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    padding: 2rem 2.5rem;
+    min-width: 320px;
+    max-width: 90vw;
+  }
+
+  .splash-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+
+  .splash-logo {
+    height: 36px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .splash-heading {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0;
+    color: #084298;
+  }
+
+  .splash-form .form-label {
+    font-weight: 500;
+  }
+
+  .splash-error {
+    min-height: 1.2em;
+  }
+
+  .moderator-identity-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+  }
 </style>
-
-
 {% endblock %}
 
 {% block content %}
@@ -57,10 +119,11 @@
                             </div>
                             <div class="card-block">
 
+<div id="moderator-wrapper" class="{% if moderator_available and not is_identified %}splash-blurred{% endif %}">
+
 <div class="info-box-custom">
-    <!-- Left: Top (image) + Bottom (text) -->
     <div class="info-left">
-        <img src="{{ ASSETS_ROOT }}/images/idug.png" >
+        <img src="{{ ASSETS_ROOT }}/images/idug.png" alt="IDUG">
         <div class="info-left-bottom">
             {% if current_event %}
               <strong>{{ current_event.event_city }}</strong><br>
@@ -69,7 +132,6 @@
         </div>
     </div>
 
-    <!-- Right: Main text -->
     <div class="info-right">
         <div class="text">
             <p class="lead text-body-secondary">
@@ -84,54 +146,41 @@
 
 {% if moderator_available %}
 
-                                <div class="row mt-3">
-                                    <div class="col-md-4">
-                                        <div class="position-relative">
-  <i class="bi bi-search search-icon"></i>
-  <input type="text" class="form-control ps-5" id="search" placeholder="Search..." autocomplete="off" oninput="filter()" value="{{ currentSearch|default:'' }}">
-</div>
-                                    </div>
-                                </div>
+    {% if is_identified %}
+        <div class="moderator-identity-bar mt-3">
+            <span class="text-muted">
+                Signed in as <strong>{{ moderator_login_name }}</strong> ({{ moderator_login_email }})
+            </span>
+            <button type="button" class="btn btn-link btn-sm p-0" id="moderator-logout-btn">Switch moderator</button>
+        </div>
 
-<div class="row mb-3">
-  <div class="col-12 col-md-auto">
-    <div class="form-check form-switch">
-      <input
-        class="form-check-input"
-        type="checkbox"
-        id="toggle-unassigned"
-        {% if unassigned %}checked{% endif %}
-        onchange="toggleUnassigned(this)"
-      >
-      <label class="form-check-label" for="toggle-unassigned">
-        Unassigned only
-      </label>
-    </div>
-    <div class="text-muted small">
-      Show only sessions without a moderator
-    </div>
-  </div>
-</div>
+        <div class="row mt-2">
+            <div class="col-md-4">
+                <div class="position-relative">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" class="form-control ps-5" id="search" placeholder="Search..." autocomplete="off" oninput="filter()" value="{{ currentSearch|default:'' }}">
+                </div>
+            </div>
+        </div>
 
+        <div class="row">
+            <div class="content">
+                <div id="results_moderators" style="min-height: 400px; margin-top:10px;">
+                    {% include "tables/table_moderator.html" %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div id="results_moderators" style="min-height: 400px; margin-top:10px;" aria-hidden="true"></div>
+    {% endif %}
 
+{% else %}
 
-                                <div class="row">
-                                    <div class="content">
-                                        <div id="results_moderators" style="min-height: 400px; margin-top:10px;">
-                                            {% include "tables/table_moderator.html" %}
-                                        </div>
-
-
-                                    </div>
-                                </div>
-
- {% else %}
-
-    <!-- UNAVAILABLE -->
     {% include "tables/moderator_unavailable.html" %}
 
 {% endif %}
 
+</div><!-- #moderator-wrapper -->
 
                             </div> <!-- card-block -->
                         </div> <!-- card -->
@@ -142,9 +191,32 @@
     </div> <!-- pcoded-inner-content -->
 </div> <!-- pcoded-content -->
 
-<div id="modal-view" class="modal-view">
+<div id="modal-view" class="modal-view"></div>
 
+{% if moderator_available and not is_identified %}
+<div id="splash-overlay" class="splash-overlay">
+  <div class="splash-card">
+    <div class="splash-title">
+      <img src="{{ ASSETS_ROOT }}/images/idug2.png" class="splash-logo" alt="IDUG" />
+      <h1 class="splash-heading">Moderator Sign-up</h1>
+    </div>
+    <form id="splash-login-form" class="splash-form" novalidate>
+      <div id="splash-login-error" class="splash-error text-danger small mb-2" style="display: none;"></div>
+      <div class="mb-2">
+        <label for="splash-moderator-name" class="form-label">Moderator name</label>
+        <input type="text" id="splash-moderator-name" name="moderator_name" class="form-control" autocomplete="name" required maxlength="100">
+      </div>
+      <div class="mb-3">
+        <label for="splash-moderator-email" class="form-label">Moderator email</label>
+        <input type="email" id="splash-moderator-email" name="moderator_email" class="form-control" autocomplete="email" maxlength="50">
+      </div>
+      <div class="d-flex gap-2 flex-wrap justify-content-center">
+        <button type="submit" class="btn btn-primary" id="splash-login-btn">Continue</button>
+      </div>
+    </form>
+  </div>
 </div>
+{% endif %}
 
 {% endblock %}
 
@@ -153,18 +225,20 @@
 <script>
     let currentSearch = '{{ currentSearch|default:'' }}';
     let lastSearch = currentSearch;
+    const isIdentified = {{ is_identified|yesno:"true,false" }};
 
     function filter() {
+        if (!isIdentified) return;
+
         currentSearch = $('#search').val();
 
         if (currentSearch !== lastSearch) {
             lastSearch = currentSearch;
-            refresh_moderator_table(true); // Reset to page 1
+            refresh_moderator_table(true);
         } else {
-            refresh_moderator_table(false); // Keep current page
+            refresh_moderator_table(false);
         }
 
-        // Apply filter to cards immediately (no reload)
         $('#card-list .card').each(function () {
             const content = $(this).data('search');
             if (content.includes(currentSearch)) {
@@ -173,58 +247,100 @@
                 $(this).hide();
             }
         });
-
     }
 
     $(document).ready(function () {
-        refresh_moderator_table();
-
-        // Delegate pagination clicks
-        $(document).on('click', '#results_moderators .pagination a', function (e) {
-            e.preventDefault();
-            const pageUrl = $(this).attr('href');
-            history.pushState(null, '', pageUrl); // Optional: update browser URL
+        if (isIdentified) {
             refresh_moderator_table();
-        });
+
+            $(document).on('click', '#results_moderators .pagination a', function (e) {
+                e.preventDefault();
+                const pageUrl = $(this).attr('href');
+                history.pushState(null, '', pageUrl);
+                refresh_moderator_table();
+            });
+        }
+
+        const splashForm = document.getElementById('splash-login-form');
+        if (splashForm) {
+            splashForm.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const errEl = document.getElementById('splash-login-error');
+                const btn = document.getElementById('splash-login-btn');
+                const name = (document.getElementById('splash-moderator-name')?.value || '').trim();
+                const email = (document.getElementById('splash-moderator-email')?.value || '').trim();
+
+                errEl.style.display = 'none';
+                errEl.textContent = '';
+
+                if (!name) {
+                    errEl.textContent = 'Moderator name is required.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                if (!email && name.toUpperCase() !== 'CPC') {
+                    errEl.textContent = 'Moderator email is required. It will be used to remind you of your sessions.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+
+                btn.disabled = true;
+                try {
+                    const res = await fetch('moderator_login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                        },
+                        body: JSON.stringify({ moderator_name: name, moderator_email: email }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                    errEl.textContent = data.message || 'Unable to continue. Please try again.';
+                    errEl.style.display = 'block';
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        }
+
+        const logoutBtn = document.getElementById('moderator-logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async function () {
+                await fetch('moderator_logout', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                });
+                window.location.reload();
+            });
+        }
     });
 
-    // Keyboard navigation for pagination (← and →)
     $(document).on('keydown', function (event) {
+        if (!isIdentified) return;
+
         const prevLink = $('#results_moderators .pagination .page-item:not(.disabled) a[aria-label="Previous"]');
         const nextLink = $('#results_moderators .pagination .page-item:not(.disabled) a[aria-label="Next"]');
 
-        if (event.key === "ArrowLeft" && prevLink.length) {
+        if (event.key === 'ArrowLeft' && prevLink.length) {
             event.preventDefault();
             const pageUrl = prevLink.attr('href');
             history.pushState(null, '', pageUrl);
             refresh_moderator_table();
         }
 
-        if (event.key === "ArrowRight" && nextLink.length) {
+        if (event.key === 'ArrowRight' && nextLink.length) {
             event.preventDefault();
             const pageUrl = nextLink.attr('href');
             history.pushState(null, '', pageUrl);
             refresh_moderator_table();
         }
     });
-
 </script>
-<script>
-function toggleUnassigned(el) {
-    const url = new URL(window.location.href);
-
-    if (el.checked) {
-        url.searchParams.set('unassigned', '1');
-        url.searchParams.delete('page'); // reset pagination
-    } else {
-        url.searchParams.delete('unassigned');
-        url.searchParams.delete('page');
-    }
-
-    history.pushState(null, '', url.toString());
-    refresh_moderator_table(true);
-}
-</script>
-
 {% endif %}
 {% endblock %}

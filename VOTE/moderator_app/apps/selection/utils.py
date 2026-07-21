@@ -1,5 +1,116 @@
 import datetime
 
+from django.db.models import Q
+
+from django.db import connection
+from django.core.validators import validate_email as django_validate_email
+from django.core.exceptions import ValidationError
+
+from .models import Moderator, ModeratorThankyou
+
+
+def is_cpc_moderator(name):
+    return (name or '').strip().upper() == 'CPC'
+
+
+def is_valid_email(email):
+    try:
+        django_validate_email((email or '').strip())
+        return True
+    except ValidationError:
+        return False
+
+
+def get_moderator_identity(request):
+    """Return (name, email) from session, or (None, None) if not identified."""
+    name = (request.session.get('moderator_login_name') or '').strip() or None
+    email = (request.session.get('moderator_login_email') or '').strip() or None
+    return name, email
+
+
+def is_moderator_identified(request):
+    name, email = get_moderator_identity(request)
+    if not name:
+        return False
+    if is_cpc_moderator(name):
+        return True
+    return bool(email)
+
+
+def parse_moderator_fields(raw_name, raw_email):
+    name = (raw_name or '').strip() or None
+    email = (raw_email or '').strip() or None
+    return name, email
+
+
+def validate_moderator_fields(name, email):
+    """
+    Both filled, both empty (remove), or CPC with name only.
+    Returns (is_valid, error_message).
+    """
+    has_name = bool(name)
+    has_email = bool(email)
+
+    if not has_name and not has_email:
+        return True, None
+    if is_cpc_moderator(name) and has_name:
+        return True, None
+    if has_name and has_email:
+        if not is_valid_email(email):
+            return False, 'Please enter a valid email address.'
+        return True, None
+    return False, (
+        'Moderator name and email must both be filled, or both left empty to remove.'
+    )
+
+
+def filter_sessions_for_moderator(qs, session_event, moderator_name, moderator_email):
+    """
+    Keep unassigned sessions and sessions assigned to the logged-in moderator.
+    CPC sees all sessions; normal moderators are matched by email identity.
+    """
+    if is_cpc_moderator(moderator_name):
+        return qs
+
+    if not moderator_email:
+        return qs.none()
+
+    my_codes = Moderator.objects.filter(
+        session_event=session_event,
+        moderator_email__iexact=moderator_email.strip(),
+    ).values_list('session_code', flat=True)
+
+    return qs.filter(Q(moderator_name__isnull=True) | Q(session_code__in=my_codes))
+
+
+def record_moderator_thankyou_pending(session_event, moderator_email):
+    """
+    Track first-time moderator signup per email per event.
+    Inserts a row with THANK_YOU_SENT=false; email sending will use this later.
+    """
+    email = (moderator_email or '').strip()
+    if not email:
+        return
+
+    if ModeratorThankyou.objects.filter(
+        session_event=session_event,
+        moderator_email__iexact=email,
+    ).exists():
+        return
+
+    # Composite PK table without surrogate id — use INSERT … ON CONFLICT for safety.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            '''
+            INSERT INTO vote."MODERATOR_THANKYOU"
+                ("SESSION_EVENT", "MODERATOR_EMAIL", "THANK_YOU_SENT", "SENT_AT")
+            VALUES (%s, %s, FALSE, NULL)
+            ON CONFLICT ("SESSION_EVENT", "MODERATOR_EMAIL") DO NOTHING
+            ''',
+            [session_event, email],
+        )
+
+
 def init_response_context(request):
     user = request.user
 
