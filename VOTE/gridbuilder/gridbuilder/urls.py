@@ -15,8 +15,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from planner import views as planner_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', planner_views.schedule_page, name='planner_root'),
     path('planner/', include('planner.urls')),
 ]

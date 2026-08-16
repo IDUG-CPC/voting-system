@@ -6,7 +6,7 @@ from django.db import connection
 from django.core.validators import validate_email as django_validate_email
 from django.core.exceptions import ValidationError
 
-from .models import Moderator, ModeratorThankyou
+from .models import Moderator, ModeratorThankyou, Session
 
 
 def is_cpc_moderator(name):
@@ -62,6 +62,53 @@ def validate_moderator_fields(name, email):
     return False, (
         'Moderator name and email must both be filled, or both left empty to remove.'
     )
+
+
+def find_moderator_schedule_conflict(session_event, session_code, moderator_email):
+    """
+    If this email already moderates another session on the same date with the
+    same start time, return that session_code; otherwise None.
+    """
+    email = (moderator_email or '').strip()
+    if not email or not session_code:
+        return None
+
+    target = Session.objects.filter(
+        session_event=session_event,
+        session_code=session_code,
+    ).first()
+    if not target or not target.session_date or not target.session_start:
+        return None
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            '''
+            SELECT s."SESSION_CODE"
+            FROM vote."SESSION" s
+            INNER JOIN vote."MODERATOR" m
+                ON m."SESSION_EVENT" = s."SESSION_EVENT"
+               AND m."SESSION_CODE" = s."SESSION_CODE"
+            WHERE s."SESSION_EVENT" = %s
+              AND s."SESSION_CODE" <> %s
+              AND s."SESSION_DATE" = %s
+              AND s."SESSION_START" = %s
+              AND m."MODERATOR_EMAIL" IS NOT NULL
+              AND btrim(m."MODERATOR_EMAIL") <> ''
+              AND lower(m."MODERATOR_EMAIL") = lower(%s)
+            ORDER BY s."SESSION_CODE"
+            LIMIT 1
+            ''',
+            [
+                session_event,
+                session_code,
+                target.session_date,
+                target.session_start,
+                email,
+            ],
+        )
+        row = cursor.fetchone()
+
+    return row[0] if row else None
 
 
 def filter_sessions_for_moderator(qs, session_event, moderator_name, moderator_email):

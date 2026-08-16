@@ -94,11 +94,39 @@
   }
 
   .moderator-identity-bar {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.5rem 1rem;
-    margin-bottom: 0.75rem;
+    column-gap: 0.75rem;
+    width: 100%;
+  }
+
+  .moderator-identity-bar .moderator-info {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .moderator-identity-bar .moderator-info .moderator-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .moderator-identity-bar .profile-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+    line-height: 1;
+    margin-right: 0.5rem;
+    color: inherit;
+  }
+
+  .moderator-identity-bar .moderator-switch {
+    justify-self: end;
+    flex-shrink: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    white-space: nowrap;
   }
 </style>
 {% endblock %}
@@ -118,6 +146,12 @@
                                 <h5>Moderator Sign-up</h5>
                             </div>
                             <div class="card-block">
+
+{% if email_verified_notice and is_identified %}
+<div class="alert alert-success mt-3 email-verified-notice" role="alert">
+    Your email address has been confirmed.
+</div>
+{% endif %}
 
 <div id="moderator-wrapper" class="{% if moderator_available and not is_identified %}splash-blurred{% endif %}">
 
@@ -147,15 +181,29 @@
 {% if moderator_available %}
 
     {% if is_identified %}
-        <div class="moderator-identity-bar mt-3">
-            <span class="text-muted">
-                Signed in as <strong>{{ moderator_login_name }}</strong> ({{ moderator_login_email }})
-            </span>
-            <button type="button" class="btn btn-link btn-sm p-0" id="moderator-logout-btn">Switch moderator</button>
-        </div>
-
-        <div class="row mt-2">
+        <div class="row mt-3">
             <div class="col-md-4">
+                {% if email_confirmation_pending %}
+                <div class="alert alert-info py-2 mb-2" role="alert">
+                    <i class="bi bi-envelope-fill text-primary me-1" aria-hidden="true"></i>
+                    Your email address is not confirmed yet.
+                    <a href="javascript:void(0);" onclick="resend_verification()" class="alert-link">
+                        (Re)send verification email
+                    </a>
+                </div>
+                {% endif %}
+                <div class="moderator-identity-bar mb-2">
+                    <div class="moderator-info d-flex align-items-center text-body-secondary">
+                        <i class="bi bi-person-circle profile-icon" aria-hidden="true"></i>
+                        <div class="moderator-name fw-semibold">{{ moderator_login_name }}</div>
+                    </div>
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm moderator-switch"
+                            id="moderator-logout-btn">
+                        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+                        Change Moderator
+                    </button>
+                </div>
                 <div class="position-relative">
                     <i class="bi bi-search search-icon"></i>
                     <input type="text" class="form-control ps-5" id="search" placeholder="Search..." autocomplete="off" oninput="filter()" value="{{ currentSearch|default:'' }}">
@@ -200,6 +248,11 @@
       <img src="{{ ASSETS_ROOT }}/images/idug2.png" class="splash-logo" alt="IDUG" />
       <h1 class="splash-heading">Moderator Sign-up</h1>
     </div>
+    {% if email_verified_notice %}
+    <div class="alert alert-success py-2 email-verified-notice" role="alert">
+      Your email address has been confirmed.
+    </div>
+    {% endif %}
     <form id="splash-login-form" class="splash-form" novalidate>
       <div id="splash-login-error" class="splash-error text-danger small mb-2" style="display: none;"></div>
       <div class="mb-2">
@@ -227,6 +280,35 @@
     let lastSearch = currentSearch;
     const isIdentified = {{ is_identified|yesno:"true,false" }};
 
+    function showVerificationMessage(message, isError) {
+        if (window.alertify) {
+            if (isError) {
+                alertify.error(message);
+            } else {
+                alertify.success(message);
+            }
+        } else {
+            window.alert(message);
+        }
+    }
+
+    async function resend_verification() {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+        try {
+            const response = await fetch('{% url "resend_verification" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            const data = await response.json();
+            showVerificationMessage(
+                data.message || 'Unable to resend verification email.',
+                !response.ok
+            );
+        } catch (error) {
+            showVerificationMessage('Unable to resend verification email. Please try again.', true);
+        }
+    }
+
     function filter() {
         if (!isIdentified) return;
 
@@ -250,6 +332,20 @@
     }
 
     $(document).ready(function () {
+        const pageUrl = new URL(window.location.href);
+        if (pageUrl.searchParams.get('email_verified') === '1') {
+            pageUrl.searchParams.delete('email_verified');
+            history.replaceState(null, '', pageUrl.pathname + pageUrl.search);
+        }
+
+        document.querySelectorAll('.email-verified-notice').forEach(function (notice) {
+            window.setTimeout(function () {
+                notice.style.transition = 'opacity 300ms ease';
+                notice.style.opacity = '0';
+                window.setTimeout(function () { notice.remove(); }, 300);
+            }, 6000);
+        });
+
         if (isIdentified) {
             refresh_moderator_table();
 
@@ -296,7 +392,9 @@
                     });
                     const data = await res.json();
                     if (data.ok) {
-                        window.location.reload();
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('page');
+                        window.location.href = url.pathname + url.search;
                         return;
                     }
                     errEl.textContent = data.message || 'Unable to continue. Please try again.';
@@ -316,7 +414,9 @@
                         'X-CSRFToken': getCookie('csrftoken'),
                     },
                 });
-                window.location.reload();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('page');
+                window.location.href = url.pathname + url.search;
             });
         }
     });

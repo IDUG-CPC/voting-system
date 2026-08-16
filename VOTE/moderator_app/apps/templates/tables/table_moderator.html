@@ -16,27 +16,34 @@
 
 <!-- Mobile card view -->
 <div class="d-md-none" id="card-list">
-  {% for row in items.data %}
-    <div class="card mb-3 shadow-sm" data-search="{{ row.search|default_if_none:''|lower }}">
+  {% for row in items.page.object_list %}
+    <div class="card mb-3 shadow-sm" data-search="{{ row.record.search|default_if_none:''|lower }}">
       <div class="card-body p-3">
         <h6 class="card-title mb-3">
-          {{ row.session_code }} - {{ row.session_title }}
+          {{ row.record.session_code }} - {{ row.record.session_title }}
         </h6>
         <div class="row mb-3">
           <div class="col-6">
-            <p class="mb-1">{{ row.session_date }}</p>
-            <p class="mb-0">{{ row.session_time }}</p>
+            <p class="mb-1">{{ row.record.session_date }}</p>
+            <p class="mb-0">{{ row.record.session_time }}</p>
           </div>
           <div class="col-6 text-end">
-            <p class="mb-1">{{ row.speaker }}</p>
-            <p class="mb-0">{{ row.subject_desc }}</p>
+            <p class="mb-1">{{ row.record.speaker }}</p>
+            <p class="mb-0">{{ row.record.subject_desc }}</p>
           </div>
         </div>
         <div class="d-flex justify-content-between align-items-center">
           <span class="text-muted fs-6 fw-semibold">
-            Moderator: {{ row.moderator_name|default:"—" }}
+            Moderator: {{ row.record.moderator_name|default:"—" }}
           </span>
-          <a href="javascript:void(0);" onclick="value_edit('{{ row.session_code }}')" class="text-primary" title="Edit Moderator">
+          {% if show_email_verification_column %}
+            {% if row.record.email_verification == 'verified' %}
+              <i class="bi bi-check-lg text-dark" title="Email confirmed" aria-label="Email confirmed"></i>
+            {% elif row.record.email_verification == 'pending' %}
+              <i class="bi bi-envelope-fill text-primary" title="Email not confirmed" aria-label="Email not confirmed"></i>
+            {% endif %}
+          {% endif %}
+          <a href="javascript:void(0);" onclick="value_edit('{{ row.record.session_code }}')" class="text-primary" title="Edit Moderator">
             <i class="bi bi-pencil-fill" style="font-size: 1.2rem;"></i>
           </a>
         </div>

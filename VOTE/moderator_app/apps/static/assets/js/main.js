@@ -87,6 +87,21 @@ function refresh_moderator_table(resetPage = false) {
 }
 
 
+function resend_verification() {
+    $.ajax({
+        url: "resend_verification",
+        type: "POST",
+        success: function(data) {
+            alertify.success(data.message || 'A verification email has been sent.');
+        },
+        error: function(xhr, errmsg) {
+            const data = xhr.responseJSON;
+            alertify.error((data && data.message) || errmsg || 'Unable to resend verification email.');
+        }
+    });
+}
+
+
 
 function value_edit(session_id) {
 
@@ -110,7 +125,10 @@ function value_edit(session_id) {
             $("#modal-view").show();
 
             setTimeout(function() {
-                    $("#moderator_name").focus();
+                    const $name = $("#moderator_name");
+                    if ($name.length && !$name.prop('readonly')) {
+                        $name.focus();
+                    }
             }, 200);
 
             var modal = document.getElementById("modal-view");
@@ -205,7 +223,5 @@ function save_edit_value(session_id) {
     });
 
 }
-
-
 
 

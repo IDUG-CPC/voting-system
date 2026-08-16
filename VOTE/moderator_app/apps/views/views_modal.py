@@ -7,10 +7,12 @@ from ..selection.utils import (
     init_response_context,
     get_moderator_identity,
     is_moderator_identified,
-    record_moderator_thankyou_pending,
     parse_moderator_fields,
     validate_moderator_fields,
+    find_moderator_schedule_conflict,
+    is_cpc_moderator,
 )
+from ..selection.email_service import maybe_send_moderator_thankyou
 
 
 def get_modal_edit_value(request):
@@ -88,6 +90,11 @@ def update_modal_edit_value(request):
             request.POST.get('moderator_email'),
         )
 
+        # CPC assignments are deliberately email-free, even if an email was
+        # entered in the modal by mistake.
+        if is_cpc_moderator(moderator_name):
+            moderator_email = None
+
         is_valid, error_message = validate_moderator_fields(moderator_name, moderator_email)
         if not is_valid:
             return JsonResponse({'message': error_message}, status=400)
@@ -107,6 +114,20 @@ def update_modal_edit_value(request):
             ).update(moderator_status_id=0)
 
         else:
+            conflict_code = find_moderator_schedule_conflict(
+                session_event, session_id, moderator_email
+            )
+            if conflict_code:
+                return JsonResponse(
+                    {
+                        'message': (
+                            'You already moderate another session at this date and time (%s).'
+                            % conflict_code
+                        )
+                    },
+                    status=400,
+                )
+
             if mod:
                 Moderator.objects.filter(
                     session_event=session_event,
@@ -122,13 +143,19 @@ def update_modal_edit_value(request):
                     moderator_name=moderator_name,
                     moderator_email=moderator_email,
                 )
-                if moderator_email:
-                    record_moderator_thankyou_pending(session_event, moderator_email)
 
             Session.objects.filter(
                 session_event=session_event,
                 session_code=session_id,
             ).update(moderator_status_id=1)
+
+            if moderator_email:
+                maybe_send_moderator_thankyou(
+                    session_event,
+                    moderator_name,
+                    moderator_email,
+                    current_event,
+                )
 
         context = init_response_context(request)
         context['message'] = 'OK'

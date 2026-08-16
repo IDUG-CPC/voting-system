@@ -23,6 +23,9 @@ class CurrentEvent(models.Model):
     event_city = models.CharField(db_column='EVENT_CITY', max_length=30)
     event_date = models.CharField(db_column='EVENT_DATE', max_length=30)
     is_active = models.BooleanField(db_column='IS_ACTIVE')
+    event_timezone = models.CharField(
+        db_column='EVENT_TIMEZONE', max_length=50, blank=True, null=True
+    )
 
     class Meta:
         managed = False
@@ -71,7 +74,9 @@ class Moderator(models.Model):
 
 class ModeratorThankyou(models.Model):
     session_event = models.CharField(db_column='SESSION_EVENT', max_length=10)
-    moderator_email = models.CharField(db_column='MODERATOR_EMAIL', max_length=50)
+    moderator_email = models.CharField(
+        db_column='MODERATOR_EMAIL', primary_key=True, max_length=50
+    )
     thank_you_sent = models.BooleanField(db_column='THANK_YOU_SENT', default=False)
     sent_at = models.DateTimeField(db_column='SENT_AT', blank=True, null=True)
 
@@ -79,6 +84,58 @@ class ModeratorThankyou(models.Model):
         managed = False
         db_table = 'MODERATOR_THANKYOU'
         unique_together = (('session_event', 'moderator_email'),)
+
+
+class ModeratorEmailVerification(models.Model):
+    """One email-verification record per moderator email and event."""
+    session_event = models.CharField(db_column='SESSION_EVENT', max_length=10)
+    moderator_email = models.CharField(
+        db_column='MODERATOR_EMAIL', primary_key=True, max_length=50
+    )
+    email_verified = models.BooleanField(db_column='EMAIL_VERIFIED', default=False)
+    verified_at = models.DateTimeField(db_column='VERIFIED_AT', blank=True, null=True)
+    verification_token = models.CharField(
+        db_column='VERIFICATION_TOKEN', max_length=128, blank=True, null=True
+    )
+    token_expires_at = models.DateTimeField(
+        db_column='TOKEN_EXPIRES_AT', blank=True, null=True
+    )
+    verification_sent = models.BooleanField(db_column='VERIFICATION_SENT', default=False)
+    sent_at = models.DateTimeField(db_column='SENT_AT', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'MODERATOR_EMAIL_VERIFICATION'
+        unique_together = (('session_event', 'moderator_email'),)
+
+
+class EmailTemplate(models.Model):
+    template_code = models.CharField(db_column='TEMPLATE_CODE', primary_key=True, max_length=20)
+    subject = models.CharField(db_column='SUBJECT', max_length=200)
+    body_html = models.TextField(db_column='BODY_HTML')
+    body_text = models.TextField(db_column='BODY_TEXT')
+    attachment_name = models.CharField(
+        db_column='ATTACHMENT_NAME', max_length=100, blank=True, null=True
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'EMAIL_TEMPLATE'
+
+
+class ModeratorReminder(models.Model):
+    session_event = models.CharField(db_column='SESSION_EVENT', max_length=10)
+    moderator_email = models.CharField(
+        db_column='MODERATOR_EMAIL', primary_key=True, max_length=50
+    )
+    session_date = models.DateField(db_column='SESSION_DATE')
+    reminder_sent = models.BooleanField(db_column='REMINDER_SENT', default=False)
+    sent_at = models.DateTimeField(db_column='SENT_AT', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'MODERATOR_REMINDER'
+        unique_together = (('session_event', 'moderator_email', 'session_date'),)
 
 
 class Moderators(models.Model):
@@ -97,5 +154,4 @@ class Moderators(models.Model):
         managed = False  # Created from a view. Don't remove.
         db_table = 'MODERATORS'
         unique_together = (('session_event', 'session_code'),)
-
 

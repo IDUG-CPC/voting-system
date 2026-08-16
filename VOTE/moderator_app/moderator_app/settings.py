@@ -198,3 +198,34 @@ USE_X_FORWARDED_HOST = True
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS").split(',')
 
 LOGIN_URL = '/signup'
+
+# Email (thank-you / reminders) — set in .env_dev or Railway
+EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=30)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="IDUG Team <noreply@localhost>")
+EMAIL_LOGO_PATH = env(
+    "EMAIL_LOGO_PATH",
+    default=str(BASE_DIR / "apps" / "static" / "assets" / "images" / "idug.png"),
+)
+EMAIL_ATTACHMENT_DIR = env(
+    "EMAIL_ATTACHMENT_DIR",
+    default=str(BASE_DIR / "apps" / "static" / "assets" / "email"),
+)
+# Days ahead of today for reminder target session_date (1 = day before in production)
+REMINDER_DAYS_AHEAD = env.int("REMINDER_DAYS_AHEAD", default=1)
+# Local hour in CURRENT_EVENT.EVENT_TIMEZONE at which reminders are sent.
+REMINDER_SEND_HOUR = env.int("REMINDER_SEND_HOUR", default=22)
+
+# Optional public URL used in verification emails. If blank, the URL from the
+# moderator login request is used instead.
+EMAIL_VERIFICATION_BASE_URL = env("EMAIL_VERIFICATION_BASE_URL", default="")
+EMAIL_VERIFICATION_TOKEN_DAYS = env.int("EMAIL_VERIFICATION_TOKEN_DAYS", default=7)
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env.int(
+    "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", default=60
+)
