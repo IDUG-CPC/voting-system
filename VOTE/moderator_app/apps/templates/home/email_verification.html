@@ -1,0 +1,33 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Email verification{% endblock %}
+
+{% block content %}
+<div class="pcoded-content">
+  <div class="pcoded-inner-content">
+    <div class="main-body">
+      <div class="page-wrapper">
+        <div class="row justify-content-center">
+          <div class="col-md-8 col-lg-6">
+            <div class="card user-list">
+              <div class="card-header"><h5>Email verification</h5></div>
+              <div class="card-block">
+                {% if status == 'confirmed' %}
+                  <p>Your email address has been confirmed. Thank you.</p>
+                {% elif status == 'verified' %}
+                  <p>Your email address was already confirmed.</p>
+                {% elif status == 'expired' %}
+                  <p>This verification link has expired. Return to Moderator Sign-up and click the blue envelope to receive a new link.</p>
+                {% else %}
+                  <p>This verification link is invalid. Return to Moderator Sign-up and request a new verification email.</p>
+                {% endif %}
+                <a class="btn btn-primary" href="{% url 'moderator' %}">Return to Moderator Sign-up</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

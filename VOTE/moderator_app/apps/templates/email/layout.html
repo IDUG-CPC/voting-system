@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FFFFFF;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  <center>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#FFFFFF;">
+      <tr>
+        <td align="center" valign="top">
+          <table border="0" cellpadding="0" cellspacing="0" width="600" style="width:100%;max-width:600px;background-color:#FFFFFF;">
+            <tr>
+              <td valign="top" style="padding:20px;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:150%;color:#505050;">
+                <div style="text-align:center;">
+                  <img src="cid:idug-logo" alt="IDUG" width="200" style="border:0;height:auto;display:inline-block;">
+                </div>
+                {% if event_city or event_date %}
+                <div style="text-align:center;margin-top:12px;color:#202020;">
+                  {% if event_city %}<strong style="font-size:16px;">{{ event_city }}</strong>{% endif %}
+                  {% if event_city and event_date %}<br>{% endif %}
+                  {% if event_date %}<span style="font-size:14px;">{{ event_date }}</span>{% endif %}
+                </div>
+                {% endif %}
+                <div style="height:1px;background-color:#e2e2e2;margin:19px 0;"></div>
+                <div style="font-family:Lato,'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:17px;line-height:24px;color:#505050;">
+                  {{ body_html|safe }}
+                </div>
+                <div style="height:1px;background-color:#e2e2e2;margin:35px 0 15px;"></div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>
