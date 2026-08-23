@@ -215,7 +215,7 @@ EMAIL_LOGO_PATH = env(
 )
 EMAIL_ATTACHMENT_DIR = env(
     "EMAIL_ATTACHMENT_DIR",
-    default=str(BASE_DIR / "apps" / "static" / "assets" / "email"),
+    default=str(BASE_DIR / "apps" / "static" / "assets" / "pdf"),
 )
 # Days ahead of today for reminder target session_date (1 = day before in production)
 REMINDER_DAYS_AHEAD = env.int("REMINDER_DAYS_AHEAD", default=1)
