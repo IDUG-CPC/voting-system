@@ -200,10 +200,10 @@
 
 
 
-    /* Calendar grid with 1 header column + 6 tracks */
+    /* Calendar grid with 1 header column + a database-defined number of tracks. */
     .calendar-grid {
       display: grid;
-      grid-template-columns: 180px repeat(6, 1fr);
+      grid-template-columns: 180px repeat(var(--track-count, 6), 1fr);
       gap: 4px;
     }
 

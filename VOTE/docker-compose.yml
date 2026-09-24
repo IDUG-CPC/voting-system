@@ -55,6 +55,24 @@ services:
       - "traefik.http.routers.webgridbuilder.tls.certresolver=letsencrypt"
       - "traefik.http.services.webgridbuilder.loadbalancer.server.port=9200"
 
+  # Speaker History App
+  webspeaker:
+    build: ./speaker_app
+    env_file:
+      - ./speaker_app/.env_docker
+    image: speaker-web-img
+    container_name: speakerweb
+    restart: always
+    expose:
+      - "9300"
+    command: sh -c "python3 manage.py collectstatic --noinput && gunicorn speaker_app.wsgi:application --bind 0.0.0.0:9300 --workers 3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webspeaker.rule=Host(\"speaker-test.idugemea.eu\")"
+      - "traefik.http.routers.webspeaker.entrypoints=websecure"
+      - "traefik.http.routers.webspeaker.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webspeaker.loadbalancer.server.port=9300"
+
 
 
   # Traefik Reverse Proxy

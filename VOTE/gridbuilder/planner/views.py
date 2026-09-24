@@ -362,7 +362,7 @@ def api_day(request, day):
 
     # 4️⃣ track headers
     headers = list(
-        CalendarColumnHeader.objects.filter(event_code=event_code).values(
+        CalendarColumnHeader.objects.filter(event_code=event_code).order_by("track").values(
             "track", "subject", "room_name"
         )
     )

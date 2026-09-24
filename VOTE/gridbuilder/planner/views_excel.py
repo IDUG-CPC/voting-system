@@ -631,7 +631,7 @@ def _write_grid_column_headers(ws_grid, event_code):
     """
     headers = list(
         CalendarColumnHeader.objects.filter(event_code=event_code)
-        .order_by("id")
+        .order_by("track")
         .values("track", "subject", "room_name")
     )
     font_track = Font(name="Calibri", size=11)

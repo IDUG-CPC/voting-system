@@ -368,6 +368,12 @@ async function loadDay(day=1){
   renderSessionList();
 
   const headerDiv=document.getElementById("calendar-headers");
+  const cal=document.getElementById("calendar");
+  const tracks=data.headers.map(h => h.track).filter(Boolean);
+  const trackCount=tracks.length;
+  const gridTemplate=`180px repeat(${trackCount}, 1fr)`;
+  headerDiv.style.gridTemplateColumns=gridTemplate;
+  cal.style.setProperty("--track-count", trackCount);
   headerDiv.innerHTML="<div></div>";
   data.headers.forEach(h=>{
     const cell=document.createElement("div");
@@ -376,7 +382,6 @@ async function loadDay(day=1){
     headerDiv.appendChild(cell);
   });
 
-  const cal=document.getElementById("calendar");
   cal.innerHTML="";
   let currentRow="";
   let currentTimeSlotId = null;
@@ -387,9 +392,10 @@ async function loadDay(day=1){
 
     // Skip later tracks that are merged under a colspan
     if (l.colspan && parseInt(l.colspan) > 1) {
-      const startIndex = ["A","B","C","D","E","F"].indexOf(l.track);
-      for (let i = 1; i < l.colspan; i++) {
-        const nextTrack = String.fromCharCode("A".charCodeAt(0) + startIndex + i);
+      const startIndex = tracks.indexOf(l.track);
+      for (let i = 1; startIndex >= 0 && i < l.colspan; i++) {
+        const nextTrack = tracks[startIndex + i];
+        if (!nextTrack) break;
         skipTracks.add(nextTrack + "-" + l.time_slot_id);
       }
     }
@@ -405,7 +411,7 @@ async function loadDay(day=1){
 
       const sep = document.createElement("div");
       sep.className = "separator-row";
-      sep.style.gridColumn = "2 / span 6";
+      sep.style.gridColumn = `2 / span ${trackCount}`;
       cal.appendChild(sep);
       currentRow = l.time_label;
       currentTimeSlotId = l.time_slot_id;
@@ -431,8 +437,10 @@ async function loadDay(day=1){
 
       // apply colspan if needed
       if (l.colspan && parseInt(l.colspan) > 1) {
-        const colIndex = ["A","B","C","D","E","F"].indexOf(l.track) + 2;
-        div.style.gridColumn = `${colIndex} / span ${l.colspan}`;
+        const trackIndex = tracks.indexOf(l.track);
+        if (trackIndex >= 0) {
+          div.style.gridColumn = `${trackIndex + 2} / span ${l.colspan}`;
+        }
       }
 
       // NO dragover / drop handlers
@@ -459,8 +467,10 @@ async function loadDay(day=1){
 
     // Apply colspan if specified (for A3 + B3)
     if (l.colspan && parseInt(l.colspan) > 1) {
-      const colIndex = ["A","B","C","D","E","F"].indexOf(l.track) + 2;
-      div.style.gridColumn = `${colIndex} / span ${l.colspan}`;
+      const trackIndex = tracks.indexOf(l.track);
+      if (trackIndex >= 0) {
+        div.style.gridColumn = `${trackIndex + 2} / span ${l.colspan}`;
+      }
     }
 
     const slot = data.slots[l.id];
