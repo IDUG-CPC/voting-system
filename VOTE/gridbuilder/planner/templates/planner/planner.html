@@ -4,7 +4,7 @@
 {% block title %}Grid Builder{% endblock %}
 
 {% block stylesheets %}
-<link rel="stylesheet" href="{% static 'assets/css/planner.css' %}">
+<link rel="stylesheet" href="{% static 'assets/css/planner.css' %}?v=20261007-type-badge">
 {% endblock %}
 
 {% block content %}
@@ -222,6 +222,96 @@
     </div>
 </div>
 
+<!-- Modal for editing normal session speakers / company -->
+<div class="modal fade" id="regularSessionEditModal" tabindex="-1" aria-labelledby="regularSessionEditModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="regularSessionEditModalLabel">Edit session</h5>
+          <div class="regular-session-edit-meta small d-flex flex-wrap align-items-center gap-2">
+            <span class="text-muted" id="regularSessionEditSubtitle"></span>
+            <span class="session-type-badge" id="regularSessionEditTypeBadge" hidden></span>
+          </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="regularSessionEditId" value="">
+        <input type="hidden" id="regularSessionEditSubject" value="">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Cell preview</label>
+          <div class="form-control bg-light text-muted" id="regSpeakersPreview" style="min-height:2.4rem"></div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <h6 class="border-bottom pb-1 mb-2">Speaker 1</h6>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label">First name</label>
+                <input type="text" class="form-control" id="regSp1First" maxlength="100">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Last name</label>
+                <input type="text" class="form-control" id="regSp1Last" maxlength="100">
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Title</label>
+              <input type="text" class="form-control" id="regSp1Title" maxlength="100">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Company</label>
+              <input type="text" class="form-control" id="regSp1Company" maxlength="200">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" id="regSp1Email" maxlength="100">
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="regSp1FirstTime">
+              <label class="form-check-label" for="regSp1FirstTime">First-time presenter</label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <h6 class="border-bottom pb-1 mb-2">Speaker 2</h6>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label">First name</label>
+                <input type="text" class="form-control" id="regSp2First" maxlength="100">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Last name</label>
+                <input type="text" class="form-control" id="regSp2Last" maxlength="100">
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Title</label>
+              <input type="text" class="form-control" id="regSp2Title" maxlength="100">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Company</label>
+              <input type="text" class="form-control" id="regSp2Company" maxlength="200">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" id="regSp2Email" maxlength="100">
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="regSp2FirstTime">
+              <label class="form-check-label" for="regSp2FirstTime">First-time presenter</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="regularSessionEditSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- CSV Import (Sessionboard) wizard modal -->
 <div class="modal fade" id="csvImportModal" tabindex="-1" aria-labelledby="csvImportModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg csv-import-modal-dialog">
@@ -313,6 +403,7 @@
 
 {% block javascripts %}
 {{ session_types|json_script:"session-types-data" }}
+{{ company_type_map|json_script:"company-type-map-data" }}
 {{ topics|json_script:"filter-topics-data" }}
 {{ subjects|json_script:"filter-subjects-data" }}
 {{ session_type_strings|json_script:"filter-session-type-strings-data" }}
@@ -324,5 +415,5 @@
     exportExcel: "{% url 'planner:export_excel' %}",
   };
 </script>
-<script src="{% static 'assets/js/planner.js' %}"></script>
+<script src="{% static 'assets/js/planner.js' %}?v=20261007-type-badge2"></script>
 {% endblock %}

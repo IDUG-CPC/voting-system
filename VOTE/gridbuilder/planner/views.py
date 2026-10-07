@@ -32,6 +32,14 @@ def _is_first_time_presenter(value):
     s = str(value).strip().lower()
     return s in ("yes", "true", "1", "y")
 
+
+def _has_speaker_2(sess):
+    """True when speaker 2 has a first or last name."""
+    return bool(
+        (getattr(sess, "speaker_2_first_name", None) or "").strip()
+        or (getattr(sess, "speaker_2_last_name", None) or "").strip()
+    )
+
 def _now_iso():
     return timezone.now().isoformat()
 
@@ -168,6 +176,7 @@ def _slots_payload(day: int, event_code: str):
                 "color": sess.session_type.color if sess.session_type else "#e7f1ff",
                 "rating": float(sess.rating) if sess.rating is not None else 0.0,
                 "is_first_time_presenter": _is_first_time_presenter(sess.speaker_1_first_time),
+                "has_speaker_2": _has_speaker_2(sess),
                 "is_special": False,
             }
         elif s.special_session_type:
@@ -247,6 +256,7 @@ def schedule_page(request):
         .order_by("id")
         .values("id", "name", "color")
     )
+    company_type_map = _company_type_map_payload(event_code)
     topics = list(
         Topic.objects.filter(event_code=event_code)
         .order_by("code")
@@ -271,6 +281,7 @@ def schedule_page(request):
             "sessions": sessions,
             "special_session_types": special_session_types,
             "session_types": session_types,
+            "company_type_map": company_type_map,
             "topics": topics,
             "subjects": subjects,
             "session_type_strings": session_type_strings,
@@ -284,6 +295,26 @@ def schedule_page(request):
     return response
 
 
+def _company_type_map_payload(event_code):
+    """Company→session_type mappings + types for live modal type preview."""
+    from .views_csv import _load_planner_company_mappings, _default_session_type_id_for_event
+
+    mappings = [
+        {"company": company, "session_type_id": int(session_type_id)}
+        for company, session_type_id in _load_planner_company_mappings(event_code)
+    ]
+    types = list(
+        SessionType.objects.filter(event_code=event_code)
+        .order_by("id")
+        .values("id", "name", "color")
+    )
+    return {
+        "mappings": mappings,
+        "types": types,
+        "default_type_id": _default_session_type_id_for_event(event_code),
+    }
+
+
 @require_http_methods(["GET"])
 def api_session_types(request):
     event_code = _event_code(request)
@@ -294,6 +325,14 @@ def api_session_types(request):
         .values("id", "name", "color")
     )
     return JsonResponse({"types": list(types)})
+
+
+@require_http_methods(["GET"])
+def api_company_type_map(request):
+    """Mappings used to derive session type / colour from speaker 1 company."""
+    if err := _require_auth_json(request):
+        return err
+    return JsonResponse(_company_type_map_payload(_event_code(request)))
 
 
 @require_http_methods(["GET"])
@@ -342,6 +381,7 @@ def api_day(request, day):
                 "session_type_id": s.session_type_id,
                 "rating": float(s.rating) if s.rating is not None else 0.0,
                 "is_first_time_presenter": _is_first_time_presenter(s.speaker_1_first_time),
+                "has_speaker_2": _has_speaker_2(s),
                 "is_special": False,
             }
         elif slot.special_session_type:
@@ -1067,3 +1107,140 @@ def save_slot_description(request):
         return JsonResponse({"ok": True, "message": "Description saved."}, status=200)
     except (KeyError, ValueError, CalendarSlot.DoesNotExist):
         return JsonResponse({"ok": False, "message": "Slot not found."}, status=404)
+
+
+def _session_edit_payload(sess):
+    """Fields for the grid session edit modal."""
+    return {
+        "id": sess.id,
+        "code": sess.session_code,
+        "title": sess.title,
+        "rating": float(sess.rating) if sess.rating is not None else 0.0,
+        "speakers": sess.speakers or "",
+        "speaker_1_first_name": sess.speaker_1_first_name or "",
+        "speaker_1_last_name": sess.speaker_1_last_name or "",
+        "speaker_1_title": sess.speaker_1_title or "",
+        "speaker_1_company": sess.speaker_1_company or "",
+        "speaker_1_email": sess.speaker_1_email or "",
+        "speaker_1_first_time": sess.speaker_1_first_time or "",
+        "speaker_2_first_name": sess.speaker_2_first_name or "",
+        "speaker_2_last_name": sess.speaker_2_last_name or "",
+        "speaker_2_title": sess.speaker_2_title or "",
+        "speaker_2_company": sess.speaker_2_company or "",
+        "speaker_2_email": sess.speaker_2_email or "",
+        "speaker_2_first_time": sess.speaker_2_first_time or "",
+        "session_type_id": sess.session_type_id,
+        "session_type": sess.session_type.name if sess.session_type else "",
+        "color": sess.session_type.color if sess.session_type else "#e7f1ff",
+        "subject": sess.subject.subject_code if sess.subject_id else "",
+        "speaker_full": sess.speaker_full_name(),
+        "is_first_time_presenter": _is_first_time_presenter(sess.speaker_1_first_time),
+    }
+
+
+def _trim_field(value, max_len):
+    text = (value if value is not None else "").strip()
+    return text[:max_len] if text else None
+
+
+def _first_time_to_store(value):
+    """Normalize checkbox / Yes-No into Sessionboard-style Yes/No or None."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    s = str(value).strip().lower()
+    if s in ("yes", "true", "1", "y", "on"):
+        return "Yes"
+    if s in ("no", "false", "0", "n", "off"):
+        return "No"
+    return str(value).strip()[:50] or None
+
+
+@require_http_methods(["GET"])
+def api_session_detail(request, session_id):
+    """Return session speaker fields for the edit modal."""
+    if err := _require_auth_json(request):
+        return err
+    event_code = _event_code(request)
+    try:
+        sess = Session.objects.select_related("session_type", "subject").get(
+            id=session_id, event_code=event_code
+        )
+    except Session.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Session not found."}, status=404)
+    return JsonResponse({"ok": True, "session": _session_edit_payload(sess)})
+
+
+@require_http_methods(["POST"])
+def save_session(request):
+    """Update speaker/company fields on a Session; remap session_type from speaker 1 company."""
+    if err := _require_auth_json(request):
+        return err
+    try:
+        data = json.loads(request.body)
+        session_id = int(data["session_id"])
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "message": "Invalid payload."}, status=400)
+
+    event_code = _event_code(request)
+    try:
+        sess = Session.objects.select_related("session_type", "subject").get(
+            id=session_id, event_code=event_code
+        )
+    except Session.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Session not found."}, status=404)
+
+    from .views_csv import _load_planner_company_mappings, _session_type_id_from_company
+
+    sess.speaker_1_first_name = _trim_field(data.get("speaker_1_first_name"), 100)
+    sess.speaker_1_last_name = _trim_field(data.get("speaker_1_last_name"), 100)
+    sess.speaker_1_title = _trim_field(data.get("speaker_1_title"), 100)
+    sess.speaker_1_company = _trim_field(data.get("speaker_1_company"), 200)
+    sess.speaker_1_email = _trim_field(data.get("speaker_1_email"), 100)
+    sess.speaker_1_first_time = _first_time_to_store(data.get("speaker_1_first_time"))
+
+    sess.speaker_2_first_name = _trim_field(data.get("speaker_2_first_name"), 100)
+    sess.speaker_2_last_name = _trim_field(data.get("speaker_2_last_name"), 100)
+    sess.speaker_2_title = _trim_field(data.get("speaker_2_title"), 100)
+    sess.speaker_2_company = _trim_field(data.get("speaker_2_company"), 200)
+    sess.speaker_2_email = _trim_field(data.get("speaker_2_email"), 100)
+    sess.speaker_2_first_time = _first_time_to_store(data.get("speaker_2_first_time"))
+
+    # Always rebuild speakers from speaker 1 (+ speaker 2 if present) — not client-editable
+    names = []
+    n1 = f"{sess.speaker_1_first_name or ''} {sess.speaker_1_last_name or ''}".strip()
+    n2 = f"{sess.speaker_2_first_name or ''} {sess.speaker_2_last_name or ''}".strip()
+    if n1:
+        names.append(n1)
+    if n2:
+        names.append(n2)
+    sess.speakers = ", ".join(names)[:200] if names else None
+
+    mappings = _load_planner_company_mappings(event_code)
+    new_type_id = _session_type_id_from_company(sess.speaker_1_company, event_code, mappings)
+    sess.session_type_id = new_type_id
+
+    sess.save(
+        update_fields=[
+            "speaker_1_first_name",
+            "speaker_1_last_name",
+            "speaker_1_title",
+            "speaker_1_company",
+            "speaker_1_email",
+            "speaker_1_first_time",
+            "speaker_2_first_name",
+            "speaker_2_last_name",
+            "speaker_2_title",
+            "speaker_2_company",
+            "speaker_2_email",
+            "speaker_2_first_time",
+            "speakers",
+            "session_type_id",
+        ]
+    )
+    sess = Session.objects.select_related("session_type", "subject").get(id=sess.id)
+    return JsonResponse(
+        {"ok": True, "message": "Session saved.", "session": _session_edit_payload(sess)},
+        status=200,
+    )

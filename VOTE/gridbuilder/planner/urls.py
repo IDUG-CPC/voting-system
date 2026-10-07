@@ -21,8 +21,11 @@ urlpatterns = [
     path("api/undo/", views.api_undo, name="api_undo"),
     path("api/days/", views.api_days, name="api_days"),
     path("api/session-types/", views.api_session_types, name="api_session_types"),
+    path("api/company-type-map/", views.api_company_type_map, name="api_company_type_map"),
     path("api/session-type-counts/", views.api_session_type_counts, name="api_session_type_counts"),
     path("api/logs/<int:log_id>/comment/", views.api_log_comment, name="api_log_comment"),
     path("api/save-slot-description/", views.save_slot_description, name="save_slot_description"),
+    path("api/session/<int:session_id>/", views.api_session_detail, name="api_session_detail"),
+    path("api/save-session/", views.save_session, name="save_session"),
 
 ]

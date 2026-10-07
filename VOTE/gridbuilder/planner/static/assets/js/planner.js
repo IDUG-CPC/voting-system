@@ -349,6 +349,22 @@ function makeDraggableSession(cellLabel, s, layoutId) {
     div.innerHTML = `<strong>${cellLabel} (${s.code})</strong> - ${s.title}<br>${formatSpeakerDisplay(s)} - ${s.speaker_company || ""}${s.subject ? ` (${s.subject})` : ""}`;
     wrap.appendChild(div);
     appendRegularSessionDecorations(wrap, s);
+    if (!READ_ONLY) {
+      const personBtn = document.createElement("button");
+      personBtn.type = "button";
+      personBtn.className = "session-person-btn";
+      const multi = Boolean(s.has_speaker_2);
+      personBtn.title = multi ? "Edit speakers / company (2 speakers)" : "Edit speakers / company";
+      personBtn.innerHTML = multi
+        ? "<i class=\"bi bi-people\"></i>"
+        : "<i class=\"bi bi-person\"></i>";
+      personBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openRegularSessionEditModal(s.id, cellLabel);
+      });
+      wrap.appendChild(personBtn);
+    }
   }
   return wrap;
 }
@@ -1074,6 +1090,173 @@ async function saveSessionDetails() {
   }
 }
 
+function _isYesNoTruthy(value) {
+  if (value == null || value === "") return false;
+  const s = String(value).trim().toLowerCase();
+  return s === "yes" || s === "true" || s === "1" || s === "y";
+}
+
+let companyTypeMapCache = null;
+let regularEditMeta = { cellLabel: "", title: "" };
+
+async function ensureCompanyTypeMap() {
+  if (companyTypeMapCache) return companyTypeMapCache;
+  let data = getJsonFromPage("company-type-map-data");
+  if (!data || !Array.isArray(data.types)) {
+    const res = await fetch("/planner/api/company-type-map/");
+    data = await res.json();
+  }
+  const typesById = {};
+  (data.types || []).forEach((t) => {
+    typesById[t.id] = t;
+  });
+  companyTypeMapCache = {
+    mappings: data.mappings || [],
+    typesById,
+    defaultTypeId: data.default_type_id,
+  };
+  return companyTypeMapCache;
+}
+
+function resolveSessionTypeFromCompany(company) {
+  const map = companyTypeMapCache;
+  if (!map) return null;
+  const companyLower = String(company || "").trim().toLowerCase();
+  let typeId = map.defaultTypeId;
+  if (companyLower) {
+    for (const row of map.mappings) {
+      const needle = String(row.company || "").trim().toLowerCase();
+      if (needle && companyLower.includes(needle)) {
+        typeId = row.session_type_id;
+        break;
+      }
+    }
+  }
+  return map.typesById[typeId] || null;
+}
+
+function _badgeTextColor(bg) {
+  const hex = String(bg || "").replace("#", "").trim();
+  if (hex.length !== 3 && hex.length !== 6) return "#212529";
+  const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return "#212529";
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luma < 0.55 ? "#fff" : "#212529";
+}
+
+function _refreshEditModalTypeBadge() {
+  const badge = document.getElementById("regularSessionEditTypeBadge");
+  const subEl = document.getElementById("regularSessionEditSubtitle");
+  if (!badge) return;
+  const company = document.getElementById("regSp1Company")?.value || "";
+  const type = resolveSessionTypeFromCompany(company);
+  const bits = [regularEditMeta.cellLabel, regularEditMeta.title].filter(Boolean);
+  if (subEl) subEl.textContent = bits.join(" · ");
+  if (!type || !type.name) {
+    badge.hidden = true;
+    badge.textContent = "";
+    return;
+  }
+  badge.hidden = false;
+  badge.textContent = type.name;
+  badge.style.backgroundColor = type.color || "#e7f1ff";
+  badge.style.color = _badgeTextColor(type.color);
+}
+
+function _refreshSpeakersPreview() {
+  const preview = document.getElementById("regSpeakersPreview");
+  if (!preview) return;
+  const first = (document.getElementById("regSp1First")?.value || "").trim();
+  const last = (document.getElementById("regSp1Last")?.value || "").trim();
+  const company = (document.getElementById("regSp1Company")?.value || "").trim();
+  const subject = (document.getElementById("regularSessionEditSubject")?.value || "").trim();
+  const firstTime = document.getElementById("regSp1FirstTime")?.checked;
+  const name = `${first} ${last}`.trim();
+  const star = firstTime && name ? "⭐ " : "";
+  const companyPart = company ? ` - ${company}` : "";
+  const subjectPart = subject ? ` (${subject})` : "";
+  preview.textContent = name ? `${star}${name}${companyPart}${subjectPart}` : "—";
+}
+
+function _fillRegularSessionForm(sess) {
+  document.getElementById("regularSessionEditId").value = sess.id;
+  document.getElementById("regularSessionEditSubject").value = sess.subject || "";
+  document.getElementById("regSp1First").value = sess.speaker_1_first_name || "";
+  document.getElementById("regSp1Last").value = sess.speaker_1_last_name || "";
+  document.getElementById("regSp1Title").value = sess.speaker_1_title || "";
+  document.getElementById("regSp1Company").value = sess.speaker_1_company || "";
+  document.getElementById("regSp1Email").value = sess.speaker_1_email || "";
+  document.getElementById("regSp1FirstTime").checked = _isYesNoTruthy(sess.speaker_1_first_time);
+  document.getElementById("regSp2First").value = sess.speaker_2_first_name || "";
+  document.getElementById("regSp2Last").value = sess.speaker_2_last_name || "";
+  document.getElementById("regSp2Title").value = sess.speaker_2_title || "";
+  document.getElementById("regSp2Company").value = sess.speaker_2_company || "";
+  document.getElementById("regSp2Email").value = sess.speaker_2_email || "";
+  document.getElementById("regSp2FirstTime").checked = _isYesNoTruthy(sess.speaker_2_first_time);
+  _refreshSpeakersPreview();
+}
+
+async function openRegularSessionEditModal(sessionId, cellLabel) {
+  const modal = document.getElementById("regularSessionEditModal");
+  const titleEl = document.getElementById("regularSessionEditModalLabel");
+  if (!modal || !sessionId) return;
+  try {
+    await ensureCompanyTypeMap();
+    const res = await fetch(`/planner/api/session/${sessionId}/`);
+    const data = await res.json();
+    if (!data.ok || !data.session) {
+      showToast(data.message || "Could not load session", "danger");
+      return;
+    }
+    const sess = data.session;
+    regularEditMeta = { cellLabel: cellLabel || "", title: sess.title || "" };
+    _fillRegularSessionForm(sess);
+    if (titleEl) titleEl.textContent = `Edit session · ${sess.code || ""}`;
+    _refreshEditModalTypeBadge();
+    new bootstrap.Modal(modal).show();
+    setTimeout(() => document.getElementById("regSp1First")?.focus(), 150);
+  } catch (err) {
+    showToast("Could not load session", "danger");
+  }
+}
+
+async function saveRegularSessionDetails() {
+  const modal = document.getElementById("regularSessionEditModal");
+  const sessionId = document.getElementById("regularSessionEditId")?.value;
+  if (!sessionId) return;
+  const payload = {
+    session_id: parseInt(sessionId, 10),
+    speaker_1_first_name: document.getElementById("regSp1First")?.value || "",
+    speaker_1_last_name: document.getElementById("regSp1Last")?.value || "",
+    speaker_1_title: document.getElementById("regSp1Title")?.value || "",
+    speaker_1_company: document.getElementById("regSp1Company")?.value || "",
+    speaker_1_email: document.getElementById("regSp1Email")?.value || "",
+    speaker_1_first_time: document.getElementById("regSp1FirstTime")?.checked ? "Yes" : "No",
+    speaker_2_first_name: document.getElementById("regSp2First")?.value || "",
+    speaker_2_last_name: document.getElementById("regSp2Last")?.value || "",
+    speaker_2_title: document.getElementById("regSp2Title")?.value || "",
+    speaker_2_company: document.getElementById("regSp2Company")?.value || "",
+    speaker_2_email: document.getElementById("regSp2Email")?.value || "",
+    speaker_2_first_time: document.getElementById("regSp2FirstTime")?.checked ? "Yes" : "No",
+  };
+  const res = await fetch("/planner/api/save-session/", {
+    method: "POST",
+    headers: { "X-CSRFToken": CSRF_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast("Session saved", "success", 1500);
+    bootstrap.Modal.getInstance(modal)?.hide();
+    refreshCurrentDay();
+  } else {
+    showToast(data.message || "Failed to save", "danger");
+  }
+}
+
 
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1106,6 +1289,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadLogHistory();
 
   document.getElementById("sessionEditSaveBtn")?.addEventListener("click", saveSessionDetails);
+  document.getElementById("regularSessionEditSaveBtn")?.addEventListener("click", saveRegularSessionDetails);
+  ["regSp1First", "regSp1Last", "regSp1Company", "regSp1FirstTime"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      _refreshSpeakersPreview();
+      if (id === "regSp1Company") _refreshEditModalTypeBadge();
+    });
+    el.addEventListener("change", () => {
+      _refreshSpeakersPreview();
+      if (id === "regSp1Company") _refreshEditModalTypeBadge();
+    });
+  });
 
   // Splash: login form (AJAX); login required, no guest access
   const splashForm = document.getElementById("splash-login-form");

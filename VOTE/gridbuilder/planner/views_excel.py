@@ -21,6 +21,16 @@ from openpyxl.worksheet.properties import PageSetupProperties
 
 from .models import CalendarColumnHeader, PlannerExport
 
+# Excel/openpyxl reject most C0 control chars (e.g. vertical tab from Sessionboard CSV).
+_ILLEGAL_XL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _xl_safe(value):
+    """Replace illegal worksheet control characters with spaces; leave non-strings unchanged."""
+    if value is None or not isinstance(value, str):
+        return value
+    return _ILLEGAL_XL_CHARS.sub(" ", value)
+
 
 def _event_code(request):
     """Current event (EMEA/NA) from session; default EMEA for guests."""
@@ -226,9 +236,14 @@ EXCEL_SHEET_ZOOM_PRINT = 100
 # Submissions sheet column indices (1-based)
 SUBMISSIONS_COL_GRIDCELL = 2  # B
 SUBMISSIONS_COL_FIRST_TIME = 24  # X Speaker 1: First Time
+SUBMISSIONS_COL_SPEAKER_2_FIRST = 25  # Y
+SUBMISSIONS_COL_SPEAKER_2_LAST = 26  # Z
 SUBMISSIONS_COL_RATING = 31  # AE
 SUBMISSIONS_COL_PRINT = 36  # AJ
 SUBMISSIONS_COL_CPC_GRIDCELL = 37  # AK
+
+# Shown on Print/CPC rating line when speaker 2 is present (after a space).
+DUAL_SPEAKER_MARK = "👥"
 
 
 def _cf_solid_fill(rgb_hex):
@@ -341,15 +356,18 @@ def _excel_formula_string_literal(s):
 
 
 def _grid_cpc_cell_formula(label, submissions_sheet_title, submissions_last_row):
-    """CPC sheet: rating line 1, then VLOOKUP slot → Submissions CPCGridCell (AK)."""
+    """CPC sheet: rating line 1 (+ 👥 if speaker 2), then VLOOKUP → Submissions CPCGridCell (AK)."""
     lit = _excel_formula_string_literal(label)
     safe_title = str(submissions_sheet_title).replace("'", "''")
     lr = int(submissions_last_row)
     ref_rating = f"'{safe_title}'!$A$2:$AE${lr}"
     ref_cpc = f"'{safe_title}'!$A$2:$AK${lr}"
+    sp2_first = f"IFERROR(VLOOKUP({lit},{ref_rating},{SUBMISSIONS_COL_SPEAKER_2_FIRST},FALSE),\"\")"
+    sp2_last = f"IFERROR(VLOOKUP({lit},{ref_rating},{SUBMISSIONS_COL_SPEAKER_2_LAST},FALSE),\"\")"
+    dual = f'IF(OR({sp2_first}<>"",{sp2_last}<>"")," {DUAL_SPEAKER_MARK}","")'
     rating = (
         f"IFERROR(TEXT(VLOOKUP({lit},{ref_rating},{SUBMISSIONS_COL_RATING},FALSE),"
-        f'"0.00")&CHAR(10),"")'
+        f'"0.00")&{dual}&CHAR(10),"")'
     )
     body = f"VLOOKUP({lit},{ref_cpc},{SUBMISSIONS_COL_CPC_GRIDCELL},FALSE)"
     return f"={rating}&{body}"
@@ -1192,9 +1210,10 @@ def _submissions_cpc_gridcell_formula(r):
 
 
 def _submissions_print_formula(r):
-    """Column AJ: Print — rating line, then session block with optional ⭐ (same row)."""
+    """Column AJ: Print — rating line (+ 👥 if speaker 2), then session block with optional ⭐."""
+    dual = f'IF(OR(Y{r}<>"",Z{r}<>"")," {DUAL_SPEAKER_MARK}","")'
     return (
-        f'=IFERROR(TEXT(AE{r},"0.00"),"")&CHAR(10)&"("&C{r}&") - "&D{r}&CHAR(10)&" "&'
+        f'=IFERROR(TEXT(AE{r},"0.00"),"")&{dual}&CHAR(10)&"("&C{r}&") - "&D{r}&CHAR(10)&" "&'
         f'IF(X{r}="Yes","⭐","")&S{r}&" "&T{r}&" - "&'
         + _submissions_formula_suffix(r)
     )
@@ -1289,41 +1308,41 @@ def _write_submissions_sheet(ws_sub, event_code):
             ev_code,
         ) = row_tuple
 
-        ws_sub.cell(row=r, column=1, value=slot)
+        ws_sub.cell(row=r, column=1, value=_xl_safe(slot))
         ws_sub.cell(row=r, column=2, value=_submissions_gridcell_formula(r))
-        ws_sub.cell(row=r, column=3, value=friendly_id)
-        ws_sub.cell(row=r, column=4, value=title)
-        ws_sub.cell(row=r, column=5, value=description)
-        ws_sub.cell(row=r, column=6, value=tags)
+        ws_sub.cell(row=r, column=3, value=_xl_safe(friendly_id))
+        ws_sub.cell(row=r, column=4, value=_xl_safe(title))
+        ws_sub.cell(row=r, column=5, value=_xl_safe(description))
+        ws_sub.cell(row=r, column=6, value=_xl_safe(tags))
         ws_sub.cell(row=r, column=7, value=None)
         ws_sub.cell(row=r, column=8, value=day)
         ws_sub.cell(row=r, column=9, value=_fmt_time_cell(start_time))
         ws_sub.cell(row=r, column=10, value=_fmt_time_cell(end_time))
         ws_sub.cell(row=r, column=11, value=None)
-        ws_sub.cell(row=r, column=12, value=submitter)
-        ws_sub.cell(row=r, column=13, value=audience)
-        ws_sub.cell(row=r, column=14, value=objective_1)
-        ws_sub.cell(row=r, column=15, value=session_type_sess)
-        ws_sub.cell(row=r, column=16, value=subject)
-        ws_sub.cell(row=r, column=17, value=presentation)
-        ws_sub.cell(row=r, column=18, value=speakers)
-        ws_sub.cell(row=r, column=19, value=s1_fn)
-        ws_sub.cell(row=r, column=20, value=s1_ln)
-        ws_sub.cell(row=r, column=21, value=s1_title)
-        ws_sub.cell(row=r, column=22, value=s1_co)
-        ws_sub.cell(row=r, column=23, value=s1_em)
-        ws_sub.cell(row=r, column=24, value=s1_ft)
-        ws_sub.cell(row=r, column=25, value=s2_fn)
-        ws_sub.cell(row=r, column=26, value=s2_ln)
-        ws_sub.cell(row=r, column=27, value=s2_title)
-        ws_sub.cell(row=r, column=28, value=s2_co)
-        ws_sub.cell(row=r, column=29, value=s2_em)
-        ws_sub.cell(row=r, column=30, value=s2_ft)
+        ws_sub.cell(row=r, column=12, value=_xl_safe(submitter))
+        ws_sub.cell(row=r, column=13, value=_xl_safe(audience))
+        ws_sub.cell(row=r, column=14, value=_xl_safe(objective_1))
+        ws_sub.cell(row=r, column=15, value=_xl_safe(session_type_sess))
+        ws_sub.cell(row=r, column=16, value=_xl_safe(subject))
+        ws_sub.cell(row=r, column=17, value=_xl_safe(presentation))
+        ws_sub.cell(row=r, column=18, value=_xl_safe(speakers))
+        ws_sub.cell(row=r, column=19, value=_xl_safe(s1_fn))
+        ws_sub.cell(row=r, column=20, value=_xl_safe(s1_ln))
+        ws_sub.cell(row=r, column=21, value=_xl_safe(s1_title))
+        ws_sub.cell(row=r, column=22, value=_xl_safe(s1_co))
+        ws_sub.cell(row=r, column=23, value=_xl_safe(s1_em))
+        ws_sub.cell(row=r, column=24, value=_xl_safe(s1_ft))
+        ws_sub.cell(row=r, column=25, value=_xl_safe(s2_fn))
+        ws_sub.cell(row=r, column=26, value=_xl_safe(s2_ln))
+        ws_sub.cell(row=r, column=27, value=_xl_safe(s2_title))
+        ws_sub.cell(row=r, column=28, value=_xl_safe(s2_co))
+        ws_sub.cell(row=r, column=29, value=_xl_safe(s2_em))
+        ws_sub.cell(row=r, column=30, value=_xl_safe(s2_ft))
         ws_sub.cell(row=r, column=31, value=rating)
-        ws_sub.cell(row=r, column=32, value=int_comm)
-        ws_sub.cell(row=r, column=33, value=ext_comm)
-        ws_sub.cell(row=r, column=34, value=sessiontype)
-        ws_sub.cell(row=r, column=35, value=ev_code)
+        ws_sub.cell(row=r, column=32, value=_xl_safe(int_comm))
+        ws_sub.cell(row=r, column=33, value=_xl_safe(ext_comm))
+        ws_sub.cell(row=r, column=34, value=_xl_safe(sessiontype))
+        ws_sub.cell(row=r, column=35, value=_xl_safe(ev_code))
         ws_sub.cell(row=r, column=36, value=_submissions_print_formula(r))
         ws_sub.cell(row=r, column=37, value=_submissions_cpc_gridcell_formula(r))
 
@@ -1333,19 +1352,19 @@ def _write_submissions_sheet(ws_sub, event_code):
     for j, spec in enumerate(special_rows):
         r = base_row + j
         slot, day, start_time, end_time, title, tags = spec
-        ws_sub.cell(row=r, column=1, value=slot)
+        ws_sub.cell(row=r, column=1, value=_xl_safe(slot))
         ws_sub.cell(row=r, column=2, value=_submissions_special_gridcell_formula(r))
         ws_sub.cell(row=r, column=3, value=None)
-        ws_sub.cell(row=r, column=4, value=title)
+        ws_sub.cell(row=r, column=4, value=_xl_safe(title))
         ws_sub.cell(row=r, column=5, value=None)
-        ws_sub.cell(row=r, column=6, value=tags)
+        ws_sub.cell(row=r, column=6, value=_xl_safe(tags))
         ws_sub.cell(row=r, column=7, value=None)
         ws_sub.cell(row=r, column=8, value=day)
         ws_sub.cell(row=r, column=9, value=_fmt_time_cell(start_time))
         ws_sub.cell(row=r, column=10, value=_fmt_time_cell(end_time))
         for c in range(11, 36):
             ws_sub.cell(row=r, column=c, value=None)
-        ws_sub.cell(row=r, column=35, value=event_code)
+        ws_sub.cell(row=r, column=35, value=_xl_safe(event_code))
         ws_sub.cell(row=r, column=37, value=f"=B{r}")
         ws_sub.cell(row=r, column=36, value=f"=AK{r}")
 
